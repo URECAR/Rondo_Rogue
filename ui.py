@@ -34,6 +34,10 @@ class UI():
         self.info_equip_index = 0  # 장비 선택 인덱스
         self.info_skill_index = 0  # 스킬 선택 인덱스
         self.in_equip_section = False  # 아이템/장비 영역 구분
+        
+        self.status_rotation_time = 2000  # 2초마다 변경
+        self.last_status_change = 0       # 마지막 변경 시간
+        self.current_status_index = 0     # 현재 표시 중인 상태이상 인덱스
 
     def show_cursorUI(self):
         cursor_x = self.level.cursor.rect.topleft[0] // TILESIZE
@@ -53,53 +57,43 @@ class UI():
             text_rect = text.get_rect()
             text_rect.bottomleft = self.level.cursor.rect.topright - self.visible_sprites.offset
             self.display_surface.blit(text,text_rect)
-
 # UI 클래스 내에서
-    def show_characterUI(self, character):  # character 매개변수 추가
+    def show_characterUI(self, character):
         char_data = CharacterDatabase.data.get(character.char_type, {})
         hidden_stats = char_data.get('hidden_stats', [])
 
-        # 패널 크기 및 위치
+        # 패널 크기 및 위치 계산
         CHARACTER_PANEL_WIDTH = 220
         level_section_width = 70  # Lv 섹션의 너비
-        name_section_width = CHARACTER_PANEL_WIDTH - level_section_width  # 이름/상태 섹션 너비
-        header_height = 15  # 이름과 레벨 영역
-        exp_height = 25  # EXP 섹션 높이
-        status_height = 25  # 상태 영역
-        
-        # 나머지 높이 설정
+        name_section_width = CHARACTER_PANEL_WIDTH - level_section_width
+        header_height = 15
+        exp_height = 25
+        status_height = 25
         divider_margin = 5
-        bar_height = 10  # 바 높이 감소
+        bar_height = 10
         bar_section_height = 150
         stats_height = 85
-        total_panel_height = header_height + divider_margin + status_height + bar_section_height + stats_height
-
-        CHARACTER_PANEL_WIDTH = 220
         total_panel_height = header_height + divider_margin + status_height + bar_section_height + stats_height
 
         # 화면 기준 배틀러의 상대적 위치 계산
         screen_width = self.display_surface.get_width()
         battler_screen_x = character.rect.centerx - self.visible_sprites.offset.x
 
-        # 배틀러가 화면의 오른쪽 절반에 있는지 확인
+        # 패널 위치 결정 (왼쪽/오른쪽)
         if battler_screen_x > screen_width / 2:
-            # 오른쪽에 있으면 왼쪽에 UI 표시
             panel_x = character.rect.left - self.visible_sprites.offset.x - CHARACTER_PANEL_WIDTH - MENU_OFFSET
         else:
-            # 왼쪽에 있으면 오른쪽에 UI 표시
             panel_x = character.rect.right - self.visible_sprites.offset.x + MENU_OFFSET
 
         panel_y = character.rect.top - self.visible_sprites.offset.y
 
-        # 패널이 화면 상단을 벗어나지 않도록 조정
+        # 패널이 화면 영역을 벗어나지 않도록 조정
         if panel_y < 0:
             panel_y = 0
-
-        # 패널이 화면 하단을 벗어나지 않도록 조정
         if panel_y + total_panel_height > self.display_surface.get_height():
             panel_y = self.display_surface.get_height() - total_panel_height
 
-        # 나머지 코드는 panel_x와 panel_y를 사용하여 패널 그리기
+        # 패널 그리기
         panel_rect = pygame.Rect(panel_x, panel_y, CHARACTER_PANEL_WIDTH, total_panel_height)
         bg_surface = pygame.Surface((CHARACTER_PANEL_WIDTH, total_panel_height), pygame.SRCALPHA)
         bg_color = (*UI_BG_COLOR, PANEL_ALPHA)
@@ -109,180 +103,180 @@ class UI():
 
         current_y = panel_y + 10
 
-        # 1. 상단부 (이름과 레벨)
-        # 이름 (왼쪽)
+        # 1. 이름과 레벨 표시
         name_color = ENERGY_COLOR if character.team == 'Ally' else (255, 100, 100)
         name_font = pygame.font.Font(UI_FONT, 18)
         name_text = name_font.render(character.name, True, name_color)
         name_rect = name_text.get_rect(topleft=(panel_x + 15, current_y))
         self.display_surface.blit(name_text, name_rect)
 
-        # Lv 섹션 (오른쪽)
+        # Lv 표시
         level_section_x = panel_x + name_section_width
-        
-        # Lv 텍스트와 숫자 (더 작게)
         level_font = pygame.font.Font(UI_FONT, 16)
         lv_text = level_font.render("Lv.", True, (255, 255, 200))
         level_number = level_font.render(str(character.LV), True, (255, 255, 200))
         
-        # Lv 배치
         lv_rect = lv_text.get_rect(topleft=(level_section_x + 10, current_y + 3))
         level_rect = level_number.get_rect(midleft=(lv_rect.right + 5, lv_rect.centery))
         
         self.display_surface.blit(lv_text, lv_rect)
         self.display_surface.blit(level_number, level_rect)
 
-        # EXP 바 추가 (Lv 아래)
+        # EXP 바
         exp_ratio = character.exp / character.stats['Max_EXP']
         exp_bar_width = level_section_width + 30
-        exp_bar_height = 12  # 작은 바
-
-        # EXP 텍스트와 바
+        exp_bar_height = 12
+        
         exp_font = pygame.font.Font(UI_FONT, 12)
         exp_text = exp_font.render(f"{int(character.exp)} / {character.stats['Max_EXP']}", True, EXP_COLOR)
         exp_text_rect = exp_text.get_rect(topleft=(level_section_x - 10, current_y + 35))
         self.display_surface.blit(exp_text, exp_text_rect)
 
-        # EXP 바 배경
         exp_bar_rect = pygame.Rect(level_section_x - 50, current_y + 50, exp_bar_width, exp_bar_height)
         pygame.draw.rect(self.display_surface, (60, 60, 60), exp_bar_rect, border_radius=3)
         
-        # EXP 바
         exp_fill_rect = pygame.Rect(level_section_x - 50, current_y + 50, 
                                 int(exp_bar_width * exp_ratio), exp_bar_height)
         pygame.draw.rect(self.display_surface, EXP_COLOR, exp_fill_rect, border_radius=3)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, exp_bar_rect, 1, border_radius=3)
 
-
-
-        # 이름/Lv 아래 가로 구분선
-        current_y += header_height + exp_height
-
-
         # 2. 상태 표시
+        current_y += header_height + exp_height
         status_font = pygame.font.Font(UI_FONT, 16)
-        if character.state:
-            status_text = character.state
-            status_color = (255, 255, 100)
+        
+        # 상태이상 효과 필터링 - 동일한 기본 상태이상은 하나로 취급
+        unique_status_effects = {}
+        for effect in character.effects:
+            if effect.type == 'status':
+                # percent나 flat 등의 suffix 제거
+                base_status = effect.source.replace('status_', '').split('_')[0]
+                unique_status_effects[base_status] = effect
+
+        status_effects = list(unique_status_effects.values())
+        
+        if status_effects:
+            # 2초마다 표시할 상태이상 변경
+            current_time = pygame.time.get_ticks()
+            if current_time - self.last_status_change >= self.status_rotation_time:
+                self.last_status_change = current_time
+                self.current_status_index = (self.current_status_index + 1) % len(status_effects)
+
+            # 현재 표시할 상태이상 선택
+            current_status = status_effects[self.current_status_index]
+            status_text = current_status.source.replace('status_', '').split('_')[0]
+            status_color = (255, 255, 100)  # 노란색
         else:
             if character.inactive:
                 status_text = "쉬는 중"
-                status_color = (150, 150, 150)
+                status_color = (150, 150, 150)  # 회색
             else:
                 status_text = "멀쩡함"
-                status_color = (100, 255, 100)
+                status_color = (100, 255, 100)  # 초록색
+                self.current_status_index = 0
 
         status_surface = status_font.render(status_text, True, status_color)
         status_rect = status_surface.get_rect(topleft=(panel_x + 15, current_y))
         self.display_surface.blit(status_surface, status_rect)
 
-        # 상태 아래 전체 가로 구분선
-        current_y += status_height
-
 
         # 3. HP, MP 바
-        current_y += 30  # 텍스트를 위한 추가 여백
+        current_y += status_height + 30
         bar_width = CHARACTER_PANEL_WIDTH - 30
-        bar_spacing = 40  # 바 사이 간격 증가
-        bar_height = 12  # 바 높이 조정
+        bar_spacing = 40
+        bar_height = 12
 
         # HP 바
         hp_ratio = character.Cur_HP / character.stats['Max_HP']
-        self.draw_stat_bar(panel_x + 15, current_y, bar_width, bar_height, "HP", hp_ratio, f"{int(character.Cur_HP)}/{int(character.stats['Max_HP'])}", HEALTH_COLOR)
+        self.draw_stat_bar(panel_x + 15, current_y, bar_width, bar_height, 
+                          "HP", hp_ratio, 
+                          f"{int(character.Cur_HP)}/{int(character.stats['Max_HP'])}", 
+                          HEALTH_COLOR)
+        
         # MP 바
         current_y += bar_spacing
         mp_ratio = character.Cur_MP / character.stats['Max_MP']
-        self.draw_stat_bar(panel_x + 15, current_y, bar_width, bar_height, "MP", mp_ratio, f"{int(character.Cur_MP)}/{int(character.stats['Max_MP'])}", ENERGY_COLOR)
+        self.draw_stat_bar(panel_x + 15, current_y, bar_width, bar_height, 
+                          "MP", mp_ratio, 
+                          f"{int(character.Cur_MP)}/{int(character.stats['Max_MP'])}", 
+                          ENERGY_COLOR)
+
         # 4. 스탯 표시
         current_y += 25
-        stat_pairs = [('STR', 'DEX'),('INT', 'RES'),('Mov', 'CHA')]
+        stat_pairs = [('STR', 'DEX'), ('INT', 'RES'), ('Mov', 'CHA')]
         stat_font = pygame.font.Font(UI_FONT, 16)
-        
-        for i, (left_stat,right_stat) in enumerate(stat_pairs):
+
+        for i, (left_stat, right_stat) in enumerate(stat_pairs):
             y_pos = current_y + i * 30
-            
-            # 왼쪽 스탯
             self.draw_stat_value(panel_x + 20, y_pos, left_stat, character, hidden_stats, stat_font)
-            # 오른쪽 스탯
             self.draw_stat_value(panel_x + 120, y_pos, right_stat, character, hidden_stats, stat_font)
 
     def draw_stat_bar(self, x, y, width, height, label, ratio, value_text, color):
-        font = pygame.font.Font(UI_FONT, 18)
-        current_val, max_val = value_text.split('/')
-        
-        # 텍스트 위치 계산
-        text_y = y - 30  # 바 위의 여백
-        
-        # HP 텍스트
-        label_surface = font.render(label, True, color)
-        label_rect = label_surface.get_rect(bottomleft=(x, y - 2))
-        self.display_surface.blit(label_surface, label_rect)
-        
-        # 현재 수치 (HP 텍스트 뒤에 약간의 간격)
-        current_surface = font.render(str(current_val).rjust(4), True, TEXT_COLOR)
-        current_rect = current_surface.get_rect(bottomleft=(x + 50, y - 2))  # HP 뒤 여백
-        self.display_surface.blit(current_surface, current_rect)
-        
-        # 구분자
-        separator_surface = font.render("/", True, TEXT_COLOR)
-        separator_rect = separator_surface.get_rect(bottomleft=(current_rect.right + 5, y - 2))
-        self.display_surface.blit(separator_surface, separator_rect)
-        
-        # 최대 수치
-        max_surface = font.render(str(max_val).ljust(4), True, TEXT_COLOR)
-        max_rect = max_surface.get_rect(bottomleft=(separator_rect.right + 5, y - 2))
-        self.display_surface.blit(max_surface, max_rect)
-        
-        # HP 바
-        bg_rect = pygame.Rect(x, y, width, height)
-        pygame.draw.rect(self.display_surface, (60, 60, 60), bg_rect, border_radius=5)
-        
-        bar_width = int(width * ratio)
-        bar_rect = pygame.Rect(x, y, bar_width, height)
-        pygame.draw.rect(self.display_surface, color, bar_rect, border_radius=5)
-        pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, bg_rect, 1, border_radius=5)
+            font = pygame.font.Font(UI_FONT, 18)
+            current_val, max_val = value_text.split('/')
+
+            # 텍스트 렌더링
+            label_surface = font.render(label, True, color)
+            label_rect = label_surface.get_rect(bottomleft=(x, y - 2))
+            self.display_surface.blit(label_surface, label_rect)
+
+            current_surface = font.render(str(current_val).rjust(4), True, TEXT_COLOR)
+            current_rect = current_surface.get_rect(bottomleft=(x + 50, y - 2))
+            self.display_surface.blit(current_surface, current_rect)
+
+            separator_surface = font.render("/", True, TEXT_COLOR)
+            separator_rect = separator_surface.get_rect(bottomleft=(current_rect.right + 5, y - 2))
+            self.display_surface.blit(separator_surface, separator_rect)
+
+            max_surface = font.render(str(max_val).ljust(4), True, TEXT_COLOR)
+            max_rect = max_surface.get_rect(bottomleft=(separator_rect.right + 5, y - 2))
+            self.display_surface.blit(max_surface, max_rect)
+
+            # 바 그리기
+            bg_rect = pygame.Rect(x, y, width, height)
+            pygame.draw.rect(self.display_surface, (60, 60, 60), bg_rect, border_radius=5)
+            
+            bar_width = int(width * ratio)
+            bar_rect = pygame.Rect(x, y, bar_width, height)
+            pygame.draw.rect(self.display_surface, color, bar_rect, border_radius=5)
+            pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, bg_rect, 1, border_radius=5)
 
     def draw_stat_value(self, x, y, stat, character, hidden_stats, font):
         """개별 스탯 값 표시"""
-        diff_font = pygame.font.Font(UI_FONT, 10)  # 기존 폰트보다 더 작은 크기로 설정
-        value = "???" if stat in hidden_stats else str(int(character.stats[stat]))
+        diff_font = pygame.font.Font(UI_FONT, 10)
         
-        # 색상 설정
+        # 숨겨진 스탯 처리
         if stat in hidden_stats:
-            stat_color = (255, 100, 100)  # 밝은 빨간색
-            value_color = (255, 100, 100)  # 값도 같은 색으로
+            value = "???"
+            stat_color = value_color = (255, 100, 100)
         else:
+            value = str(int(character.stats[stat]))
             stat_color = TEXT_COLOR
-            base_value = int(character.base_stats.get(stat, 0))
-            current_value = character.stats[stat]
             
-            # 버프/디버프에 따른 색상
-            if current_value > base_value:
-                value_color = (150, 255, 150)  # 버프(연두색)
-            elif current_value < base_value:
-                value_color = (255, 150, 150)  # 디버프(연한 빨간색)
-            else:
-                value_color = TEXT_COLOR
+            # 기본값과 현재값의 차이 계산
+            base_value = int(character.base_stats.get(stat, 0))
+            current_value = int(character.stats[stat])
+            value_color = (TEXT_COLOR if current_value == base_value else 
+                        (150, 255, 150) if current_value > base_value else 
+                        (255, 150, 150))
 
         # 스탯 이름 표시
         name_text = f"{stat}: "
         name_surface = font.render(name_text, True, stat_color)
         self.display_surface.blit(name_surface, (x, y))
-        
-        # 값 표시
+
+        # 스탯 값 표시
         value_surface = font.render(value, True, value_color)
         value_rect = value_surface.get_rect(topleft=(x + name_surface.get_width(), y))
         self.display_surface.blit(value_surface, value_rect)
 
-        # 스탯 차이 표시 (숨겨진 스탯이 아닐 경우에만)
-        if not stat in hidden_stats:
+        # 차이값 표시 (숨겨진 스탯이 아닐 경우)
+        if stat not in hidden_stats:
             stat_diff = int(character.stats[stat]) - int(character.base_stats[stat])
             if stat_diff != 0:
-                # 차이값 색상 설정
                 diff_color = (150, 255, 150) if stat_diff > 0 else (255, 150, 150)
-                diff_text = f"({'+' if stat_diff > 0 else ''}{int(stat_diff)})"
-                diff_surface = diff_font.render(diff_text, True, diff_color)  # 작은 폰트 사용
-                diff_rect = diff_surface.get_rect(topleft=(value_rect.right + 5, y + 2))  # y 좌표 약간 조정하여 중앙 정렬
+                diff_text = f"({'+' if stat_diff > 0 else ''}{stat_diff})"
+                diff_surface = diff_font.render(diff_text, True, diff_color)
+                diff_rect = diff_surface.get_rect(topleft=(value_rect.right + 5, y + 2))
                 self.display_surface.blit(diff_surface, diff_rect)
 
     def show_player_menu(self, current_menu):

@@ -5,7 +5,7 @@ from tile import Tile
 from database import *
 from collections import deque
 import random
-from support import SoundManager, InputManager
+from support import SoundManager, InputManager, EffectManager, Effect
 from ai import AI
 from ui import ConfirmationDialog
 from states import *
@@ -17,6 +17,7 @@ class MapAction:
         self.visible_sprites = self.level.visible_sprites
         self.obstacle_sprites = self.level.obstacle_sprites
         self.current_phase = 'Ally'
+        self.base_phase_order = ['Ally', 'Supporter', 'Enemy','Neutral','Non-Player','Visitor']
         self.neutral_mode = ''
         self.previous_mode = ''
         self.current_mode = 'init'
@@ -42,6 +43,7 @@ class MapAction:
         self.target_battler = None
         self.input_manager = InputManager()  # input_manager로 이름 변경
         self.sound_manager = SoundManager()
+        self.effect_manager = EffectManager()
         self.AI = AI(self)
         self.update_time = 0
         self.step_enemy_turns = False
@@ -53,6 +55,7 @@ class MapAction:
         self.current_dialog = None
         self.path_dragging = False
         self.last_drag_pos = None
+        self.elapsed_turn = 0
         # 초기 BGM 재생
 
     def change_state(self, new_state):
@@ -78,217 +81,17 @@ class MapAction:
         state = self.current_state.update()
         if state:
             self.change_state(state)
-
- ##### 캐릭터 스탯, 버프 처리
-    def apply_status(self, battler, status_name, duration):
-        """상태이상 적용"""
-        battler.state = status_name
-        battler.status_duration = duration
-        self.recalculate_stats(battler)
-
-    def update_status(self, battler):
-        """상태이상 업데이트"""
-        if battler.state and battler.status_duration > 0:
-            old_state = battler.state
-            battler.status_duration -= 1
-            if battler.status_duration <= 0:
-                battler.state = None
-                self.recalculate_stats(battler, update_only=True)  # 턴 감소/제거 시에는 update_only=True
-
-    def apply_buff(self, battler, buff_name, stat_changes, turns=None):
-        """
-        버프/디버프 적용
-        stat_changes는 퍼센트와 고정값 변화를 구분하여 저장
-        """
-        # 기존의 같은 이름 버프 제거
-        battler.buffs = [buff for buff in battler.buffs if buff['name'] != buff_name]
-        
-        # 새 버프 형식으로 변환
-        if isinstance(stat_changes, dict) and 'percent' in stat_changes and 'flat' in stat_changes:
-            # 이미 적절한 형식으로 전달된 경우
-            formatted_stats = stat_changes
-        else:
-            # 구 형식 변환 작업
-            formatted_stats = {
-                'percent': {},
-                'flat': {}
-            }
-            
-            if isinstance(stat_changes, dict):
-                has_percent = False
-                # Buff_%나 Status_%로 전달된 경우를 처리
-                for key, value in stat_changes.items():
-                    if isinstance(value, dict):  # 내부가 딕셔너리인 경우
-                        if key == 'percent':
-                            formatted_stats['percent'].update(value)
-                            has_percent = True
-                        elif key == 'flat':
-                            formatted_stats['flat'].update(value)
-                        else:
-                            # 일반 스탯인 경우 flat으로 처리
-                            formatted_stats['flat'][key] = value
-                    else:
-                        # 직접 값이 전달된 경우 flat으로 처리
-                        formatted_stats['flat'][key] = value
-        
-        # 새 버프 추가
-        battler.buffs.append({
-            'name': buff_name,
-            'stats': formatted_stats,
-            'turns': turns
-        })
-        
-        self.recalculate_stats(battler)
-
-    def recalculate_stats(self, battler, update_only=False):
-        """모든 스탯 재계산"""
-        # 1. 기본 스탯으로 초기화
-        old_stats = battler.stats.copy() if hasattr(battler, 'stats') else {}
-        battler.stats = battler.base_stats.copy()
-        
-        battler.stats['CHA'] += battler.combat_cha_boost
-        # 2. 장비 효과 적용
-        equipment_mods = {
-            'percent': {},  # multiplier 계열
-            'flat': {}     # 일반 스탯
-        }
-        
-        for equip_name in battler.equips:
-            if equip_name not in EQUIP_PROPERTIES:
-                continue
-                
-            equip_stats = EQUIP_PROPERTIES[equip_name]['STAT']
-            for stat, value in equip_stats.items():
-                if 'multiplier' in stat.lower():
-                    # multiplier 계열은 퍼센트 수정치로 처리
-                    equipment_mods['percent'][stat] = equipment_mods['percent'].get(stat, 0) + value
-                else:
-                    # 일반 스탯은 고정값으로 처리
-                    equipment_mods['flat'][stat] = equipment_mods['flat'].get(stat, 0) + value
-
-        # 3. 퍼센트 수정치 계산 (장비 + 상태이상 + 버프)
-        percent_mods = equipment_mods['percent'].copy()
-        
-        # 3.1 상태이상으로 인한 퍼센트 수정치
-        if battler.state and battler.state in STATUS_PROPERTIES:
-            status_percent = STATUS_PROPERTIES[battler.state].get('Stat_%', {})
-            for stat, mod in status_percent.items():
-                if stat in battler.stats:
-                    percent_mods[stat] = percent_mods.get(stat, 0) + mod
-
-        # 3.2 버프/디버프로 인한 퍼센트 수정치
-        for buff in battler.buffs:
-            if 'stats' in buff and buff['stats'].get('percent'):
-                for stat, mod in buff['stats']['percent'].items():
-                    if stat in battler.stats:
-                        percent_mods[stat] = percent_mods.get(stat, 0) + mod
-
-        # 퍼센트 수정치 적용
-        for stat, total_percent in percent_mods.items():
-            if stat in battler.stats:
-                battler.stats[stat] = battler.stats[stat] * (1 + total_percent/100)
-
-        # 4. 고정값 수정치 적용 (장비 + 상태이상 + 버프)
-        flat_mods = equipment_mods['flat'].copy()
-        
-        # 4.1 상태이상으로 인한 고정값 수정치
-        if battler.state and battler.state in STATUS_PROPERTIES:
-            status_flat = STATUS_PROPERTIES[battler.state].get('Stat', {})
-            for stat, mod in status_flat.items():
-                if stat in battler.stats:
-                    flat_mods[stat] = flat_mods.get(stat, 0) + mod
-
-        # 4.2 버프/디버프로 인한 고정값 수정치
-        for buff in battler.buffs:
-            if 'stats' in buff and buff['stats'].get('flat'):
-                for stat, mod in buff['stats']['flat'].items():
-                    if stat in battler.stats:
-                        flat_mods[stat] = flat_mods.get(stat, 0) + mod
-
-        # 고정값 수정치 적용
-        for stat, mod in flat_mods.items():
-            if stat in battler.stats:
-                battler.stats[stat] += mod
-
-        # 4. multiplier 관련 스탯은 최소값 0.2로 보정
-        for stat in battler.stats:
-            if 'multiplier' in stat.lower():
-                battler.stats[stat] = max(0.2, battler.stats[stat])
-        
-        # 5. 정수로 처리할 스탯들 처리
-        integer_stats = ['Max_HP', 'Max_MP', 'STR', 'DEX', 'INT', 'RES', 'Mov', 'CHA']
-        for stat in integer_stats:
-            if stat in battler.stats:
-                battler.stats[stat] = int(battler.stats[stat])
-
-        # 상태이상 효과 적용
-        if battler.state and battler.state in STATUS_PROPERTIES:
-            effects = STATUS_PROPERTIES[battler.state].get('Effects', [])
-            battler.force_inactive = 'inactive' in effects
-        
-        # 스탯 변화 애니메이션 처리 (업데이트 중에는 생략)
-        if self.animation_manager and old_stats and not update_only and self.current_mode != 'init':
-            stat_changes = []
-            offset = 0
-            main_stats = ['STR', 'DEX', 'INT', 'RES']
-            
-            for stat in main_stats:
-                if stat in battler.stats and stat in old_stats and battler.stats[stat] != old_stats[stat]:
-                    stat_changes.append((stat, battler.stats[stat] > old_stats[stat], offset))
-                    offset -= 24
-            
-            if battler.state:
-                stat_changes.append((STATUS_PROPERTIES[battler.state].get('Notification', battler.state), None, offset))
-                offset -= 24
-
-            if stat_changes:
-                for stat_info in stat_changes:
-                    self.animation_manager.create_animation(battler,'STAT_CHANGE',value=stat_info,)
-
-    def update_buffs(self, battler):
-        """버프 상태 업데이트"""
-        # 만료된 버프 제거 및 효과 제거
-        remaining_buffs = []
-        buffs_changed = False
-        
-        for buff in battler.buffs:
-            # 영구 지속 버프는 건너뛰기
-            if buff['turns'] is None:
-                remaining_buffs.append(buff)
-                continue
-            
-            buff['turns'] -= 1
-            if buff['turns'] > 0:
-                remaining_buffs.append(buff)
-            else:
-                buffs_changed = True
-        
-        battler.buffs = remaining_buffs
-        # 버프가 제거된 경우에만 스탯 재계산
-        if buffs_changed:
-            self.recalculate_stats(battler, update_only=True)  # 턴 감소/제거 시에는 update_only=True
-
-    def apply_passive_skills(self, battler):
-        """패시브 스킬 효과 적용"""
-        for skill_name, skill_level in battler.skills.items():
-            skill_info = SKILL_PROPERTIES.get(skill_name)
-            if skill_info and skill_info['Type'] == 'Passive':
-                # 모든 수정치를 buff_data로 통합
-                buff_data = {
-                    'percent': skill_info.get('Buff_%', {}).get(skill_level, {}),
-                    'flat': skill_info.get('Buff', {}).get(skill_level, {})
-                }
-                self.apply_buff(battler, f"{skill_name}_passive", buff_data, turns=None)
 ##### 경험치 습득 및 레벨업 처리
     def process_exp_gain(self):
         """경험치 획득과 레벨업 처리"""
-        # 경험치 획득량 계산
         for battler in self.level.battler_sprites:
             if battler.tmp_exp_gain:
-                # print(battler.tmp_exp_gain)
-                battler.exp += battler.tmp_exp_gain * (1 + 0.01 * battler.stats["CHA"]) * battler.stats["EXP_multiplier"]
+                # 경험치 획득량 계산 (CHA와 EXP 배율 적용)
+                exp_gain = battler.tmp_exp_gain * (1 + 0.01 * battler.stats["CHA"]) * battler.stats["EXP_multiplier"]
+                battler.exp += exp_gain
                 battler.tmp_exp_gain = 0
-                # 레벨업 했는 지 확인
+                
+                # 레벨업 체크
                 while battler.exp >= battler.stats['Max_EXP']:
                     # 초과 경험치 계산
                     excess_exp = battler.exp - battler.stats['Max_EXP']
@@ -299,16 +102,23 @@ class MapAction:
                     # 새로운 스탯 계산
                     new_stats = CharacterDatabase.calculate_stats(battler.char_type, battler.LV)
                     
-                    battler.Cur_HP = min(battler.Cur_HP + new_stats["Max_HP"] - battler.stats['Max_HP'] + battler.stats["Level_Up_Regen"] * new_stats["Max_HP"], new_stats["Max_HP"])
-                    battler.Cur_MP = min(battler.Cur_MP + new_stats["Max_MP"] - battler.stats['Max_MP'] + battler.stats["Level_Up_Regen"] * new_stats["Max_MP"], new_stats["Max_MP"])
+                    # HP, MP 회복 처리 (레벨업 리젠 포함)
+                    hp_heal = (new_stats["Max_HP"] - battler.stats['Max_HP'] + 
+                            battler.stats["Level_Up_Regen"] * new_stats["Max_HP"])
+                    mp_heal = (new_stats["Max_MP"] - battler.stats['Max_MP'] + 
+                            battler.stats["Level_Up_Regen"] * new_stats["Max_MP"])
+                            
+                    battler.Cur_HP = min(battler.Cur_HP + hp_heal, new_stats["Max_HP"])
+                    battler.Cur_MP = min(battler.Cur_MP + mp_heal, new_stats["Max_MP"])
+                    
+                    # 기본 스탯 업데이트하고 효과 재계산
                     battler.base_stats = new_stats.copy()
-                    self.recalculate_stats(battler, update_only=True)
-                    # HP와 MP를 최대치로 회복
+                    self.effect_manager.update_effects(battler)
                     
                     # 초과 경험치 이전
                     battler.exp = excess_exp
                     
-                    # 레벨업 애니메이션 생성
+                    # 레벨업 애니메이션
                     self.animation_manager.create_animation(battler, 'LEVEL_UP')
                     self.animation_manager.create_animation(battler, 'AURA')
        
@@ -318,45 +128,70 @@ class MapAction:
             return False
             
         item_data = ITEM_PROPERTIES[item_name]
-        effect = item_data['Effect']
+        effect_data = item_data['Effect']
         
-        # 힐링 처리
-        if 'Heal_%' in effect:
-            for stat, value in effect['Heal_%'].items():
+        # 퍼센트 기반 힐링
+        if 'Heal_%' in effect_data:
+            for stat, value in effect_data['Heal_%'].items():
                 if stat == 'Cur_HP':
                     heal_amount = int(battler.stats['Max_HP'] * value / 100)
-                    print(heal_amount)
                     battler.Cur_HP = min(battler.stats['Max_HP'], battler.Cur_HP + heal_amount)
-                    # 힐링 수치 표시 애니메이션 추가
-                    self.animation_manager.create_animation((battler.collision_rect.centerx, battler.collision_rect.top - 10),'DAMAGE',value=heal_amount)
+                    self.animation_manager.create_animation(
+                        (battler.collision_rect.centerx, battler.collision_rect.top - 10),
+                        'DAMAGE',
+                        value=heal_amount
+                    )
                 elif stat == 'Cur_MP':
                     heal_amount = int(battler.stats['Max_MP'] * value / 100)
                     battler.Cur_MP = min(battler.stats['Max_MP'], battler.Cur_MP + heal_amount)
                     
-        elif 'Heal' in effect:
-            for stat, value in effect['Heal'].items():
+        # 고정값 힐링
+        elif 'Heal' in effect_data:
+            for stat, value in effect_data['Heal'].items():
                 if stat == 'Cur_HP':
                     battler.Cur_HP = min(battler.stats['Max_HP'], battler.Cur_HP + value)
-                    # 힐링 수치 표시 애니메이션 추가
-                    self.animation_manager.create_animation((battler.collision_rect.centerx, battler.collision_rect.top - 10),'DAMAGE',value=value)
+                    self.animation_manager.create_animation(
+                        (battler.collision_rect.centerx, battler.collision_rect.top - 10),
+                        'DAMAGE',
+                        value=value
+                    )
                 elif stat == 'Cur_MP':
                     battler.Cur_MP = min(battler.stats['Max_MP'], battler.Cur_MP + value)
         
-        elif 'Change' in effect:
-            for stat,value in effect['Change'].items():
-                if stat == 'CHA':
-                    battler.stats["CHA"] = battler.stats["CHA"] + value
-        # 버프 처리
-        if 'Buff' in effect or 'Buff_%' in effect:
-            duration = effect.get('duration', None)  # None이면 영구 지속
-            buff_data = {
-                'percent': effect.get('Buff_%', {}),
-                'flat': effect.get('Buff', {})
-            }
-            self.apply_buff(battler,f"{item_name}_effect", buff_data, duration)
+        # 버프 효과 적용
+        duration = effect_data.get('duration', None)
+        
+        # 퍼센트 효과가 있다면
+        if 'Buff_%' in effect_data:
+            effect = Effect(
+                effect_type='item_buff',
+                effects=effect_data['Buff_%'],
+                source=f"item_{item_name}_percent",
+                remaining_turns=duration,
+                is_percent=True
+            )
+            self.effect_manager.add_effect(battler, effect)
+        
+        # 고정값 효과가 있다면
+        if 'Buff' in effect_data:
+            effect = Effect(
+                effect_type='item_buff',
+                effects=effect_data['Buff'],
+                source=f"item_{item_name}",
+                remaining_turns=duration
+            )
+            self.effect_manager.add_effect(battler, effect)
         
         # 인벤토리에서 아이템 제거
         self.selected_battler.inventory.remove(item_name)
+        
+        # if 'animate' in item_data:
+        #     self.animation_manager.create_animation(
+        #         battler,
+        #         item_data['animate'],
+        #         wait=True
+        #     )
+        
         return True
 
     def update_path_tiles(self):
@@ -554,19 +389,172 @@ class MapAction:
         
         return None
 
-    def apply_skill_effects(self, target):
-        """스킬 효과(데미지/상태이상 등) 적용"""
-        skill_info = SKILL_PROPERTIES[self.skill]
-        skill_level = self.selected_battler.skills[self.skill]
-        
-        # 데미지 계산 및 적용
-        target_magic_def = target.stats["INT"] * 1.2 + target.stats["RES"] * 0.4
-        level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
-        skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
-        Damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
-        
-        self.Damage(self.selected_battler,target,Damage,type='Magic')
+    def apply_skill_effects(self, target, skill_name, skill_level):
+        """스킬 효과 적용"""
+        skill_info = SKILL_PROPERTIES[skill_name]
 
+        # 버프 스킬인 경우
+        if skill_info['skill_type'] == 'buff':
+            buff_duration = skill_info.get('duration', 1)
+            # 퍼센트 효과 적용
+            if 'Buff_%' in skill_info:
+                effect = Effect(
+                    effect_type='buff',
+                    effects=skill_info['Buff_%'][skill_level],
+                    source=f"buff_{skill_name}",
+                    remaining_turns=buff_duration,
+                    is_percent=True
+                )
+                target.effects.append(effect)
+                
+            # 고정값 효과 적용
+            if 'Buff' in skill_info:
+                effect = Effect(
+                    effect_type='buff',
+                    effects=skill_info['Buff'][skill_level],
+                    source=f"buff_{skill_name}",
+                    remaining_turns=buff_duration
+                )
+                target.effects.append(effect)
+                
+            # 버프 시각 효과
+            self.animation_manager.create_animation(
+                (target.collision_rect.centerx, target.collision_rect.centery),
+                skill_info.get('animate', 'SHIELD'),
+                wait=True
+            )
+            
+        # 데미지 스킬인 경우
+        else:
+            target_magic_def = target.stats["INT"] * 1.2 + target.stats["RES"] * 0.4
+            level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
+            skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
+            damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+            
+            # 데미지 처리
+            self.Damage(self.selected_battler, target, damage, "Magic")
+            
+            # 상태이상 적용
+            if target.Cur_HP > 0 and 'Status_%' in skill_info:
+                status_chances = skill_info['Status_%'].get(skill_level, {})
+                for status, chance in status_chances.items():
+                    if random.random() * 100 < chance:
+                        effect = Effect(
+                            effect_type='status',
+                            effects=STATUS_PROPERTIES[status].get('Stat', {}),
+                            source=f"status_{status}",
+                            remaining_turns=3  # 기본 3턴
+                        )
+                        if 'Stat_%' in STATUS_PROPERTIES[status]:
+                            effect_percent = Effect(
+                                effect_type='status',
+                                effects=STATUS_PROPERTIES[status]['Stat_%'],
+                                source=f"status_{status}_percent",
+                                remaining_turns=3,
+                                is_percent=True
+                            )
+                            target.effects.append(effect_percent)
+                        target.effects.append(effect)
+                self.effect_manager.update_effects(target)
+
+    def apply_combat_effects(self, attacker, target, hit_location='front'):
+        """전투 관련 효과 적용"""
+        # 히트 위치에 따른 데미지 보정
+        location_multipliers = {
+            'front': 1.0,
+            'side': 1.1,
+            'rear': 1.25
+        }
+        location_multiplier = location_multipliers.get(hit_location, 1.0)
+        
+        # 임시 전투 버프 추가
+        combat_buff = {
+            'percent': {
+                'damage_multiplier': (location_multiplier - 1) * 100  # 퍼센트로 변환
+            }
+        }
+        self.effect_manager.apply_temporary_buff(attacker, 'combat_location', combat_buff, duration=1)
+        
+        # 취약성 증가 (후방 공격 등에 의한)
+        vulnerability = {
+            'front': {'evasion': 0, 'counter': 0, 'critical': 0, 'zoc': 0},
+            'side': {'evasion': 5, 'counter': 5, 'critical': 4, 'zoc': 5},
+            'rear': {'evasion': 15, 'counter': 15, 'critical': 10, 'zoc': 15}
+        }
+        vuln = vulnerability.get(hit_location, {'evasion': 0, 'counter': 0, 'critical': 0, 'zoc': 0})
+        
+        # 취약성 디버프 적용
+        vulnerability_debuff = {
+            'percent': {
+                'Melee_evasion_chance': -vuln['evasion'],
+                'Counter_Chance': -vuln['counter'],
+                'Critical_defense': -vuln['critical'],
+                'ZOC_Chance': -vuln['zoc']
+            }
+        }
+        self.effect_manager.apply_temporary_buff(target, 'combat_vulnerability', vulnerability_debuff, duration=1)
+
+    def apply_support_skill_effects(self, source_battler, target_battler, skill_name, skill_level):
+        """지원 스킬 효과 적용 (예: 전장의 함성)"""
+        skill_info = SKILL_PROPERTIES[skill_name]
+        
+        if not skill_info.get('Support_type'):
+            return
+            
+        # 회복 효과 처리
+        if skill_info['Support_type'] == 'Recovery' and 'Support' in skill_info:
+            support_values = skill_info['Support'][skill_level]
+            for stat, value in support_values.items():
+                if stat == 'Cur_HP':
+                    heal_amount = value
+                    target_battler.Cur_HP = min(target_battler.stats["Max_HP"], 
+                                              target_battler.Cur_HP + heal_amount)
+                    self.animation_manager.create_animation(
+                        (target_battler.collision_rect.centerx, 
+                         target_battler.collision_rect.top - 10),
+                        'DAMAGE',
+                        value=heal_amount
+                    )
+
+        # 소스 스탯 기반 버프
+        elif skill_info['Support_type'] == 'Boost':
+            if 'Support_%' in skill_info:
+                buff_data = {'percent': {}}
+                for stat, percent in skill_info['Support_%'][skill_level].items():
+                    buff_value = int(source_battler.stats[stat] * (percent / 100))
+                    buff_data['percent'][stat] = buff_value
+                self.effect_manager.apply_temporary_buff(
+                    target_battler,
+                    f"support_{skill_name}",
+                    buff_data,
+                    duration=1  # 이동 페이즈 동안만 지속
+                )
+
+        # 기본 스탯 버프
+        elif skill_info['Support_type'] == 'Boost_self':
+            buff_data = {'percent': {}, 'flat': {}}
+            
+            if 'Support' in skill_info:
+                for stat, value in skill_info['Support'][skill_level].items():
+                    buff_data['flat'][stat] = value
+                    
+            if 'Support_%' in skill_info:
+                for stat, percent in skill_info['Support_%'][skill_level].items():
+                    buff_data['percent'][stat] = percent
+                    
+            if buff_data['percent'] or buff_data['flat']:
+                self.effect_manager.apply_temporary_buff(
+                    target_battler,
+                    f"support_self_{skill_name}",
+                    buff_data,
+                    duration=1
+                )
+
+        if buff_data['percent'] or buff_data['flat']:
+            # 버프 적용 시 시각 효과
+            self.animation_manager.create_animation(target_battler, 'AURA', wait=True)
+        
+        self.map_action.effect_manager.update_effects(target_battler)
 
     def check_magic_range(self, battler, skill):
         skill_range = SKILL_PROPERTIES[skill].get('Range', {}).get(battler.skills[skill], 0)
@@ -661,52 +649,74 @@ class MapAction:
                         
         return tiles
 
+# map_act.py의 endturn 메서드에서 관련 부분 제거
     def endturn(self):
+        """턴 종료 시 처리"""
         self.target_battler = None
-            
         self.interacted_battlers = []
         self.level.cursor.SW_select = False
-        if (self.current_Class == 'Magic' or 'Range') and not all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
-            # print("되돌아감")
-            self.visible_sprites.focus_on_target(self.selected_battler, self.level.cursor)
-            self.level.cursor.rect.center = self.selected_battler.collision_rect.center
-        self.current_Class = ''
+
         if self.selected_battler:
-        # 임시 버프 제거
-            if any(buff for buff in self.selected_battler.buffs if (buff['name'].startswith('temp_'))):
-                self.selected_battler.buffs = [buff for buff in self.selected_battler.buffs if not (buff['name'].startswith('temp_') or buff['name'].endswith('_temp'))]
-            # 버프 제거 후 스탯 재계산
-                self.recalculate_stats(self.selected_battler)
-            # 배틀러 상태 변경
-            self.selected_battler.inactive = True   # 이동 종료 후 해당 캐릭터 비활성화
+            # 캐릭터 상태 변경
+            self.selected_battler.inactive = True
             self.selected_battler.isfollowing_root = False
             self.selected_battler.selected = False
             self.selected_battler.priority = self.selected_battler.pos.y * TILESIZE
+
+            # 턴 행동에 따른 activate_condition 초기화
+            if not all(battler.inactive for battler in self.level.battler_sprites 
+                    if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
+                if self.current_Class == 'Magic':
+                    self.selected_battler.activate_condition['Turn_Without_Magic'] = 0
+                elif self.current_Class == 'Range':
+                    self.selected_battler.activate_condition['Turn_Without_Range'] = 0
+                elif self.current_Class == 'Melee':
+                    self.selected_battler.activate_condition['Turn_Without_Melee'] = 0
+
+                if self.move_roots:
+                    self.selected_battler.activate_condition['Turn_Without_Move'] = 0
+                # if self.skill:
+                #     self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
+
             self.selected_battler = None
-        if all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase):
+        
+        if all(battler.inactive for battler in self.level.battler_sprites 
+            if battler.team == self.current_phase):
             self.change_state('phase_change')
         else:
             self.level.cursor.select_lock = False
             self.level.cursor.move_lock = False
             self.change_state('explore')
+        
+        self.current_Class = ''    
 
-    def Damage(self,selected_battler,target_battler,Damage,type):
-        self.animation_manager.create_animation((target_battler.collision_rect.centerx, target_battler.collision_rect.top - 10),'DAMAGE', value=-Damage)
-        if type in ("Melee", "Range", "Magic"):
-            kill_exp = CharacterDatabase.data[target_battler.char_type].get('Kill_EXP', 0)
-            max_hp = target_battler.stats["Max_HP"]
-            cha_multiplier = selected_battler.stats["CHA_increase_multiplier"]
-            dmg_ratio = Damage / max_hp
+    def Damage(self, attacker, target, damage, damage_type):
+        """데미지 처리 및 관련 효과 적용"""
+        # 애니메이션 생성
+        self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.top - 10),'DAMAGE',value=-damage)
 
-            if Damage > target_battler.Cur_HP:
-                # 적을 쓰러뜨린 경우
-                target_battler.Cur_HP = 0
-                selected_battler.tmp_exp_gain += kill_exp * (1 + target_battler.Cur_HP / max_hp)
-                selected_battler.combat_cha_boost += int(5 * cha_multiplier * (1 + dmg_ratio))
-                self.recalculate_stats(selected_battler)
-            else:
-                # 적을 쓰러뜨리지 못한 경우
-                target_battler.Cur_HP -= Damage
-                selected_battler.tmp_exp_gain += kill_exp * dmg_ratio
-                selected_battler.combat_cha_boost += int(5 * cha_multiplier * (dmg_ratio))
-                self.recalculate_stats(selected_battler)
+        # 경험치 계산을 위한 데이터
+        kill_exp = CharacterDatabase.data[target.char_type].get('Kill_EXP', 0)
+        max_hp = target.stats["Max_HP"]
+        cha_multiplier = attacker.stats["CHA_increase_multiplier"]
+        dmg_ratio = damage / max_hp
+
+        # 데미지 적용 및 경험치 획득
+        if damage > target.Cur_HP:
+            target.Cur_HP = 0
+            attacker.tmp_exp_gain += kill_exp * (1 + target.Cur_HP / max_hp)
+            
+            # CHA 증가 효과
+            cha_boost = int(5 * cha_multiplier * (1 + dmg_ratio))
+            self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+        else:
+            target.Cur_HP -= damage
+            attacker.tmp_exp_gain += kill_exp * dmg_ratio
+            
+            # CHA 증가 효과
+            cha_boost = int(5 * cha_multiplier * dmg_ratio)
+            self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+
+        # 상태이상이나 조건부 효과들 체크
+        self.effect_manager.update_effects(target)  # 대상의 효과 업데이트
+        self.effect_manager.update_effects(attacker)  # 공격자의 효과 업데이트

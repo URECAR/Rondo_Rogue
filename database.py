@@ -52,7 +52,9 @@ class CharacterDatabase:
                 'offset': [0, -32]  # 중앙에서 위로 16픽셀 이동
             },
             'Class': 'Melee',
-            'equips' : ['절망','안아줘요 날다람쥐','러시안룰렛', '도윤이의 풍선자동차'],
+            'equips' : [
+                '절망','안아줘요 날다람쥐','러시안룰렛', '도윤이의 풍선자동차'
+                        ],
             # 'Range' : 6,
             'inventory': ['HP_Potion', 'MP_Potion', 'Shield_Potion','Battle_Potion'],
             'skills': {
@@ -61,6 +63,11 @@ class CharacterDatabase:
                 '테스트스킬2' : 1,
                 '테스트스킬3' : 1,
                 '테스트스킬5' : 1,
+                '상시 근접 방어' : 1,
+                '저돌맹진' : 1,
+                '무념의 기보' : 3,
+                'Z.O.C 무시' : 1,
+                '신중함' : 3,
             },
         },
         'Player2': {
@@ -186,7 +193,7 @@ class CharacterDatabase:
         'Spirit': {
             'name'  : '솔의 눈',
             'base_stats': {
-                'Max_HP': 7, 'Max_MP': 1, 'STR': 18, 'DEX': 20, 'INT': 20, 'RES': 7,
+                'Max_HP': 7, 'Max_MP': 1, 'STR': 18, 'DEX': 200, 'INT': 20, 'RES': 7,
                 'CHA': 25, 'Max_EXP': 30, 'Mov': 6
             },
             'growth_stats': {
@@ -430,6 +437,7 @@ ANIMATION_PROPERTIES = {
         'folder_path': '../graphics/particles/shield',
         'size': 2,
         'anchor': 'center',
+        'offset' : [0,-20],
         'sound': 'SHIELD'
     },
     'AURA': {
@@ -453,6 +461,7 @@ ANIMATION_PROPERTIES = {
         'size': 1,
         'anchor': 'bottom',
         'offset': [0, -64],
+        'priority_offset': 64,
         'sound': 'FIRE_MAGIC1'
     },
     'THUNDER1': {
@@ -512,6 +521,7 @@ ANIMATION_PROPERTIES = {
         'size': 1,
         'anchor': 'center',
         'sound': 'POTION',
+        'priority_offset': 64,
     },
     'PHASE_CHANGE': {
         'size': 0.5,                # 화면 크기 대비 백분율 (size_fit_screen이 False일 때 사용)
@@ -578,7 +588,7 @@ SKILL_PROPERTIES = {
             3: {'ZOC_Ignore_Chance': 75},
         },
     },
-    '상시 근접 방어@': {
+    '상시 근접 방어': {
         'name': 'Always Melee Defense',
         'Type': 'Passive',
         'Description' : '''보유 시, 받는 근접 피해량%을 줄인다''',
@@ -603,11 +613,11 @@ SKILL_PROPERTIES = {
     '저돌맹진': {
         'name': 'Reckless Charge',
         'Type': 'Passive',
-        'Description': '''보유 시 STR이 상승하지만, DEF가 하락한다''',
+        'Description': '''보유 시 STR%이 상승하지만, RES%가 하락한다''',
         'Buff_%': {
-            1: {'STR': 10,'DEF' : -10},
-            2: {'STR': 15,'DEF' : -15},
-            3: {'STR': 20,'DEF' : -20},
+            1: {'STR': 10,'RES' : -10},
+            2: {'STR': 15,'RES' : -15},
+            3: {'STR': 20,'RES' : -20},
         },
     },
     '보좌': {
@@ -776,12 +786,43 @@ SKILL_PROPERTIES = {
     },
     '다시 불타는 혼': {
         'name': 'Burning Soul Again',
-        'Type': 'Passive',
+        'Type': 'Passive_Conditional',
         'Description': '''보유 시 레벨업 시 HP,MP %를 추가로 회복한다''',
         'Buff_%': {
-            1: {'EXP_multiplier': 10}, 
-            2: {'EXP_multiplier': 20}, 
-            3: {'EXP_multiplier': 3000},  
+            1: {'Level_Up_Regen': 10}, 
+            2: {'Level_Up_Regen': 20}, 
+            3: {'Level_Up_Regen': 30},  
+        }
+    },
+    '무념의 기보': {
+        'Type': 'Passive_Conditional',
+        'Description': '''보유 시 {Turn_Without_Magic} 턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.''',
+        'Judge_Type': ['equal', 'more'],
+        'Condition': {
+            1: {'Turn_Without_Magic': 4},
+            2: {'Turn_Without_Magic': 3},
+            3: {'Turn_Without_Magic': 2}
+        },
+        'Buff': {
+            1: {'Mov': 1},
+            2: {'Mov': 1},
+            3: {'Mov': 1}
+        },
+    },
+    '불굴의 의지': {
+        'name': 'Indomitable Will',
+        'Type': 'Passive',
+        'Description': '''보유 시 HP가 {Condition}% 이하이면 STR이 증가한다. ''',
+        'Condition': {
+            'type' : ['equal','more'],
+            1: {'Max_HP': 50}, 
+            2: {'Max_HP': 50}, 
+            3: {'Max_HP': 50}, 
+        },
+        'Buff': {
+            1: {'STR': 10}, 
+            2: {'STR': 15}, 
+            3: {'STR': 20}, 
         }
     },
     # --- 버프 --- #
@@ -849,9 +890,9 @@ SKILL_PROPERTIES = {
             3 : 7,
         },
         'Status_%' : {
-            1: {'동결' : 10},    # 데미지 입을 시 10% 확률로 동결 상태이상
-            2: {'동결' : 15},    
-            3: {'동결' : 20, '약화' : 10},    
+            1: {'동결' : 100,'약화' : 100},    # 데미지 입을 시 10% 확률로 동결 상태이상
+            2: {'동결' : 100,'약화' : 100},    
+            3: {'동결' : 100, '약화' : 10},    
         }
     },
     '테스트스킬1': {
@@ -987,6 +1028,7 @@ STATUS_PROPERTIES = {
     '여기어디': {
         'Description': '몸이 휘청거려 공격력과 이동력이 감소한다.',
         'Notification': '혼란에 빠짐',
+        'duration': 3,  # 지속 턴 수
         'Stat_%': {  # 퍼센트 기반 스탯 변화
             'STR': -20,  # -20%
         },
@@ -997,6 +1039,7 @@ STATUS_PROPERTIES = {
     '약화': {
         'Description': '힘이 빠져 공격력이 감소한다.',
         'Notification': '약화됨',
+        'duration': 3,  # 지속 턴 수
         'Stat_%': {
             'STR': -30,
         }
@@ -1004,9 +1047,14 @@ STATUS_PROPERTIES = {
     '동결': {
         'Description': '몸이 얼어붙어 움직일 수 없다.',
         'Notification': '동결됨',
+        'duration': 1,  # 지속 턴 수
         'Stat_%': {},  # 스탯 변화 없음
         'Stat': {},
-        'Effects': ['inactive']  # 특수 효과: inactive 상태 강제
+        'Effects': [
+            'inactive',
+            'force_hit_melee',
+            'force_hit_ranged',
+        ],
     },
 }
 ITEM_PROPERTIES = {

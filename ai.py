@@ -157,6 +157,7 @@ class AI():
             # print('접근 모드로 전환')
         self.result_temp_move_roots = temp_move_roots
         return '이동'
+
     def range_ai(self):
         attack_range = self.char_data["Range"]
         # print(attack_range)
@@ -282,7 +283,7 @@ class AI():
         skill_info = SKILL_PROPERTIES[skill_name]
         skill_range = skill_info['Range'][self.selected_battler.skills[skill_name]]
         skill_mana = skill_info['Mana'][self.selected_battler.skills[skill_name]]
-        
+        sense_enemy = skill_range + self.selected_battler.stats['Mov']
         if self.selected_battler.Cur_MP >= skill_mana:
             attackable_targets = []
             for battler in self.level.battler_sprites:
@@ -307,7 +308,7 @@ class AI():
                 return  '스킬사용'
             
             # 공격 대상이 없으면 접근
-            sense_enemy = skill_range + self.selected_battler.stats['Mov']
+            
             sense_target_list = []
             for battler in self.level.battler_sprites:
                 if battler.team != self.selected_battler.team:
@@ -320,9 +321,11 @@ class AI():
                 if paths:
                     route = paths[0][1]
                     valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
-                    self.result_temp_move_roots = valid_route
-                    # self.execute_move_roots()
-                    return '이동'
+                    if valid_route:
+                        self.result_temp_move_roots = valid_route
+                        # self.execute_move_roots()
+                        return '이동'
+                return '턴종료'
         
         # 마나가 부족하면 아이템 사용
         if 'MP_Potion' in self.selected_battler.inventory:
@@ -337,9 +340,11 @@ class AI():
             if paths:
                 route = paths[0][1]
                 valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
-                self.result_temp_move_roots = valid_route
-                # self.execute_move_roots()
-                return '이동'
+                if valid_route:
+                    self.result_temp_move_roots = valid_route
+                    # self.execute_move_roots()
+                    return '이동'
+            return '턴종료'
         
         # 아군 무리도 없으면 도망
         enemy_positions = [battler.pos for battler in self.level.battler_sprites if battler.team != self.selected_battler.team]
@@ -349,10 +354,11 @@ class AI():
             if paths:
                 route = paths[0][1]
                 valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
-                self.result_temp_move_roots = valid_route
-                # self.execute_move_roots()
-                return '이동'
-
+                if valid_route:
+                    self.result_temp_move_roots = valid_route
+                    # self.execute_move_roots()
+                    return '이동'
+            return '턴종료'
     # def detect_attackable_target(self,battler,skill_name):
     #     skill_info = SKILL_PROPERTIES.get(skill_name)
     #     skill_mana = skill_info['Mana'][battler.skills[skill_name]]
@@ -386,7 +392,7 @@ class AI():
     def execute(self):
         self.battler_init()
         # print(self.char_data)
-        if self.selected_battler.force_inactive:
+        if self.selected_battler.force_inactive or self.selected_battler.inactive:
             result = '턴종료'
         elif self.char_data['Class'] == 'Melee':
             result = self.melee_ai()

@@ -30,6 +30,7 @@ class Level:
         # self.create_map1()                                  # map1 생성
         self.create_map2()
         self.map_action = MapAction(self)  # MapAction 인스턴스 생성
+
     def create_map2(self):
         # 맵 데이터 로드
         map_data = {
@@ -182,10 +183,11 @@ class Level:
         self.visible_sprites.update()
         self.map_action.update()
         self.ui.display()
-        # debug(self.battlers['Player1'].pos)
+        debug(self.battlers['Player1'].effect_manager.get_active_effects(self), x = 150)
         debug(self.cursor.pos)
         debug(self.map_action.current_state, x = 70)
-        debug(self.map_action.cur_moves, y= 50)
+        debug(self.map_action.elapsed_turn, y= 50)
+        debug(self.battlers['Player1'].effects, y= 70)
 class YSortCameraGroup(pygame.sprite.Group):
     def __init__(self):
         super().__init__()
@@ -216,12 +218,16 @@ class YSortCameraGroup(pygame.sprite.Group):
         self.is_moving = False
         self.move_speed = 0.15
 
-    def toggle_zoom(self):
-        """줌 활성화/비활성화 토글"""
-        self.zoom_enabled = not self.zoom_enabled
-        if not self.zoom_enabled:
-            self.target_zoom = 1.0
-            self.zoom_scale = 1.0
+    def enable_zoom(self):
+        """Enable zoom and set target zoom to battle zoom level"""
+        self.zoom_enabled = True
+        self.target_zoom = self.battle_zoom
+        
+    def disable_zoom(self):
+        """Disable zoom and reset zoom scale to 1.0"""
+        self.zoom_enabled = True
+        self.target_zoom = 1.0
+        self.zoom_scale = 1.0
 
     def zoom_to_battler(self, battler):
         """특정 배틀러에게 줌인"""

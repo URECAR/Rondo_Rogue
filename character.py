@@ -2,10 +2,10 @@
 import pygame
 import os
 from properties import *
-from support import import_folder
+from support import import_folder, EffectManager, Effect
 from database import MAP1
 from database import CharacterDatabase
-from database import SKILL_PROPERTIES, STATUS_PROPERTIES
+from database import SKILL_PROPERTIES, STATUS_PROPERTIES, EQUIP_PROPERTIES
 from animation import Animation
 class Character(pygame.sprite.Sprite):
     def __init__(self, pos, groups, obstacle_sprites, char_type='None', team='Neutral', ):
@@ -21,6 +21,7 @@ class Character(pygame.sprite.Sprite):
         self.isfollowing_root = False
         self.ismove = False
         self.obstacle_sprites = obstacle_sprites
+        self.effect_manager = EffectManager()
         # 위치 및 이동
         self.pos = pygame.math.Vector2(pos[0], pos[1])
         self.Goto = pygame.math.Vector2()
@@ -52,7 +53,7 @@ class Character(pygame.sprite.Sprite):
         self.isknockback = False
         self.isknockback_move = False
 
-        self.force_inactive = False  # 상태이상으로 인한 강제 inactive
+
         self.properties = {}
         
         # 캐릭터 데이터 로드
@@ -107,31 +108,129 @@ class Character(pygame.sprite.Sprite):
             
             # 그래픽용 rect는 offset 적용
             self.rect = self.image.get_rect()
-            self.rect.center = (
-                self.collision_rect.centerx + self.graphics_offset[0],
-                self.collision_rect.centery + self.graphics_offset[1]
-            )
+            self.rect.center = (self.collision_rect.centerx + self.graphics_offset[0],self.collision_rect.centery + self.graphics_offset[1])
         except Exception as e:
             raise RuntimeError(f"Error loading graphics for {self.char_type}: {e}")
 
         # 스탯 초기화
-        self.name = char_data.get('name', self.char_type)  # name이 없으면 char_type을 사용
+        self.name = char_data.get('name', self.char_type)
         self.LV = MAP1.spawns[self.char_type]['Level'] if self.char_type in MAP1.spawns else 1
         self.skills = char_data['skills']
-        self.combat_cha_boost = 0  # 전투로 인한 CHA 증가량
         self.stats = CharacterDatabase.calculate_stats(self.char_type, self.LV)
-        self.base_stats = self.stats.copy()  # 기본 스탯 저장
-        self.state = None
+        self.base_stats = self.stats.copy()
         self.max_items = 4
         self.inventory = char_data.get('inventory', []).copy()
-        self.equips = char_data.get('equips', []).copy()  # 기본 장비 복사
-        self.buffs = []
-           
+        self.effects = []
+
+        # 장비 효과 적용
+        self.equips = char_data.get('equips', []).copy()
+        for equip_name in self.equips:
+            if equip_name in EQUIP_PROPERTIES:
+                equip_data = EQUIP_PROPERTIES[equip_name]
+                effect_data = {
+                    'percent': {},
+                    'flat': {}
+                }
+                
+                for stat, value in equip_data['STAT'].items():
+                    if 'multiplier' in stat.lower():
+                        effect_data['percent'][stat] = value
+                    else:
+                        effect_data['flat'][stat] = value
+                        
+                if effect_data['percent']:
+                    effect = Effect(
+                        effect_type='equipment',
+                        effects=effect_data['percent'],
+                        source=f"equipment_{equip_name}",
+                        is_percent=True
+                    )
+                    self.effects.append(effect)
+                    
+                if effect_data['flat']:
+                    effect = Effect(
+                        effect_type='equipment',
+                        effects=effect_data['flat'],
+                        source=f"equipment_{equip_name}"
+                    )
+                    self.effects.append(effect)
+
+        # 패시브 스킬 효과 적용
+        for skill_name, skill_level in self.skills.items():
+            skill_info = SKILL_PROPERTIES.get(skill_name)
+            if not skill_info:
+                print(f"{skill_name} 스킬 불러오기 실패")
+                continue
+                
+            if skill_info['Type'] == 'Passive':
+                # print(f"\nApplying passive skill: {skill_name}")
+                # 퍼센트 기반 패시브 효과
+                if 'Buff_%' in skill_info:
+                    effect = Effect(
+                        effect_type='passive',
+                        effects=skill_info['Buff_%'][skill_level],
+                        source=f"passive_{skill_name}",
+                        is_percent=True
+                    )
+                    # print(f"Adding percent effect: {effect.effects}")
+                    self.effects.append(effect)
+                    
+                # 고정값 패시브 효과
+                if 'Buff' in skill_info:
+                    effect = Effect(
+                        effect_type='passive',
+                        effects=skill_info['Buff'][skill_level],
+                        source=f"passive_{skill_name}"
+                    )
+                    # print(f"Adding flat effect: {effect.effects}")
+                    self.effects.append(effect)
+            
+            elif skill_info['Type'] == 'Passive_Conditional':
+                # print(f"\nApplying conditional passive: {skill_name}")
+                condition = skill_info['Condition'][skill_level]
+                
+                # 퍼센트 기반 조건부 효과
+                if 'Buff_%' in skill_info:
+                    effect = Effect(
+                        effect_type='passive_conditional',
+                        effects=skill_info['Buff_%'][skill_level],
+                        source=f"passive_conditional_{skill_name}",
+                        condition=condition,
+                        is_percent=True
+                    )
+                    # print(f"Adding conditional percent effect: {effect.effects}")
+                    self.effects.append(effect)
+                    
+                # 고정값 조건부 효과
+                if 'Buff' in skill_info:
+                    effect = Effect(
+                        effect_type='passive_conditional',
+                        effects=skill_info['Buff'][skill_level],
+                        source=f"passive_conditional_{skill_name}",
+                        condition=condition
+                    )
+                    # print(f"Adding conditional flat effect: {effect.effects}")
+                    self.effects.append(effect)
+
         self.Cur_HP = int(self.stats['Max_HP'])
         self.Cur_MP = int(self.stats['Max_MP'])
 
         self.exp = 0
         self.tmp_exp_gain = 0
+        
+        self.force_inactive = False
+        self.activate_condition = {
+            'Turn': 0,
+            'Turn_Without_Magic': 0,
+            'Turn_Without_Melee': 0,
+            'Turn_Without_Range': 0,
+            'Turn_Without_Move': 0,
+            'Turn_Without_Skill': 0,
+            'Max_Damage': 0,     
+        }
+
+        # 마지막으로 모든 효과 적용하여 스탯 업데이트
+        self.effect_manager.update_effects(self)
 
     def update_facing_direction(self, target_pos):
         """이동 방향에 따라 facing 방향 업데이트"""
@@ -490,8 +589,6 @@ class HPBar(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         # HP 바의 priority는 항상 부모 캐릭터보다 높게 설정
         self.priority = 0  # update에서 동적으로 설정됨
-        
-
 
     def update(self):
         hp_ratio = self.parent.Cur_HP / self.parent.stats['Max_HP']

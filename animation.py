@@ -551,7 +551,6 @@ class Animation(pygame.sprite.Sprite):
         text_rect = text_copy.get_rect(center=(self.image.get_width() // 2, self.image.get_height() // 2))
         self.image.blit(text_copy, text_rect)
 
-
     def set_position(self, start_pos):
         """애니메이션 위치 설정"""
         if isinstance(start_pos, tuple):
@@ -564,9 +563,6 @@ class Animation(pygame.sprite.Sprite):
                 self.rect.center = start_pos.rect.center
             elif self.anchor == 'topleft':
                 self.rect.topleft = start_pos.rect.topleft
-
-
-
 
 class AnimationManager:
     def __init__(self, visible_sprites, parent):
@@ -594,6 +590,7 @@ class AnimationManager:
         if wait:
             self.active_animations.append(animation)
         return animation
+
     def update(self):
         """애니메이션 상태 업데이트"""
         self.active_animations = [anim for anim in self.active_animations if anim.alive()]
