@@ -1,14 +1,8 @@
 # support.py
-        
 import pygame
 from properties import *
-from csv import reader
-from os import walk            
 import os
-from typing import Dict, Optional
-from database import SOUND_PROPERTIES
-import math
-from database import EQUIP_PROPERTIES, SKILL_PROPERTIES, STATUS_PROPERTIES
+from database import EQUIP_PROPERTIES, SKILL_PROPERTIES, STATUS_PROPERTIES, SOUND_PROPERTIES
 from common_method import print_if
 
 class SoundManager:
@@ -270,19 +264,55 @@ class EventManager:
 class Effect:
     def __repr__(self):
         """Effect 객체의 기본 출력 형태"""
-        effect_str = f"[{self.type}] "
-        if self.source:
-            effect_str += f"from {self.source}: "
+        # 기본 정보
+        effect_str = ""
         
-        # 효과 내용 포맷팅
-        effects_str = []
-        for stat, value in self.effects.items():
-            if self.is_percent:
-                effects_str.append(f"{stat}: {value:+}%")
-            else:
-                effects_str.append(f"{stat}: {value:+}")
+        # passive
+        if self.type == 'passive':
+            if self.source:
+                source_str = self.source
+                source_str = source_str.replace("passive_", "")
+                effect_str = f"{source_str}: "
+            
+            effects_str = []
+            for stat, value in self.effects.items():
+                if self.is_percent:
+                    effects_str.append(f"{stat}: {value:+}%")
+                else:
+                    effects_str.append(f"{stat}: {value:+}")
+            effect_str += ", ".join(effects_str)
+            
+        # passive_conditional
+        elif self.type == 'passive_conditional':
+            if self.source:
+                source_str = self.source
+                source_str = source_str.replace("passive_conditional_", "")
+                effect_str = f"{source_str}: "
+            
+            effects_str = []
+            for stat, value in self.effects.items():
+                if self.is_percent:
+                    effects_str.append(f"{stat}: {value:+}%")
+                else:
+                    effects_str.append(f"{stat}: {value:+}")
+            effect_str += ", ".join(effects_str)
+            
+            # 활성화 여부는 조건이 있는지만 표시
+            if self.condition:
+                effect_str += " (조건부 활성)"
         
-        effect_str += ", ".join(effects_str)
+        # 그 외 타입
+        else:
+            effect_str = f"[{self.type}] "
+            if self.source:
+                effect_str += f"from {self.source}: "
+            effects_str = []
+            for stat, value in self.effects.items():
+                if self.is_percent:
+                    effects_str.append(f"{stat}: {value:+}%")
+                else:
+                    effects_str.append(f"{stat}: {value:+}")
+            effect_str += ", ".join(effects_str)
         
         # 남은 턴수 표시
         if self.remaining_turns is not None:
@@ -316,50 +346,32 @@ class Effect:
     def check_condition(self, battler):
         """조건 충족 여부 확인"""
         if not self.condition:
-            print_if(self.SW_debug,f"No condition for {self.source}")
             return True
 
-        print_if(self.SW_debug,f"\n[Condition Check for {self.source}]")
-        print_if(self.SW_debug,f"Battler: {battler.name}")
-        print_if(self.SW_debug,f"Condition: {self.condition}")
-        
-        # SKILL_PROPERTIES에서 해당 스킬 찾기
-        skill_name = None
-        if self.source.startswith('passive_conditional_'):
-            skill_name = self.source.replace('passive_conditional_', '')
-            print_if(self.SW_debug,f"Found skill name: {skill_name}")
-            
-        if skill_name and skill_name in SKILL_PROPERTIES:
-            skill_info = SKILL_PROPERTIES[skill_name]
-            print_if(self.SW_debug,f"Found skill info: {skill_info}")
-            judge_types = skill_info.get('Judge_Type', [])
-            print_if(self.SW_debug,f"Judge types: {judge_types}")
+        target = self.condition.get('target')
+        stat = self.condition.get('stat')
+        check_types = self.condition.get('check_type', [])
+        threshold = self.condition.get('threshold', 0)
 
-            # 배틀러의 스킬 레벨 찾기
-            skill_level = battler.skills.get(skill_name)
-            if skill_level:
-                print_if(self.SW_debug,f"Skill level: {skill_level}")
-                condition_for_level = skill_info['Condition'][skill_level]
-                print_if(self.SW_debug,f"Condition for this level: {condition_for_level}")
+        # 현재는 target이 'self'인 경우만 고려
+        if target == 'self':
+            # activate_condition과 stats에서 stat 값을 검색
+            value_activate = battler.activate_condition.get(stat, 0)
+            value_stats = battler.stats.get(stat, 0)
+            current_value = value_activate + value_stats
+            print_if(self.SW_debug,"현재값:"+str(current_value))
+            print_if(self.SW_debug,"역치값:"+str(threshold))
+            # check_types 중 하나라도 만족하면 True
+            for ctype in check_types:
+                if ctype.lower() == 'equal' and current_value == threshold:
+                    return True
+                elif ctype.lower() == 'more' and current_value >= threshold:
+                    return True
+                elif ctype.lower() == 'less' and current_value < threshold:
+                    return True
+            return False
 
-                for stat, threshold in condition_for_level.items():
-                    current_value = battler.activate_condition.get(stat, 0)
-                    print_if(self.SW_debug,f"Checking {stat}: Current value = {current_value}, Threshold = {threshold}")
-
-                    condition_met = False
-                    for judge_type in judge_types:
-                        if judge_type == 'equal' and current_value == threshold:
-                            condition_met = True
-                        elif judge_type == 'more' and current_value >= threshold:
-                            condition_met = True
-                        elif judge_type == 'less' and current_value < threshold:
-                            condition_met = True
-
-                    print_if(self.SW_debug,f"Condition met: {condition_met}")
-                    if not condition_met:
-                        return False
-                return True
-            
+        # 다른 타겟 로직 필요한 경우 추가
         return True
 
 class EffectManager:
@@ -425,6 +437,11 @@ class EffectManager:
 
     def update_effects(self, battler):
         """효과 적용하여 스탯 재계산"""
+        
+        battler.activate_condition['HP_ratio'] = battler.Cur_HP / battler.stats['Max_HP'] * 100
+        battler.activate_condition['MP_ratio'] = battler.Cur_MP / battler.stats['Max_MP'] * 100
+        
+        
         if not hasattr(battler, 'effects'):
             battler.effects = []
 
@@ -604,34 +621,6 @@ class EffectManager:
                 battler.effects.append(effect)
                 print_if(self.SW_debug,f"Added flat effect: {effect.effects}")
 
-    def apply_status_effect(self, battler, status_name, duration=None):
-        """상태이상 효과 적용"""
-        status_info = STATUS_PROPERTIES[status_name]
-        # duration이 지정되지 않은 경우 STATUS_PROPERTIES에서 가져옴
-        if duration is None:
-            duration = status_info.get('duration', 3)  # 기본값 3턴
-        
-        # 퍼센트 효과
-        if 'Stat_%' in status_info:
-            effect = Effect(
-                effect_type='status',
-                effects=status_info['Stat_%'],
-                source=f"status_{status_name}",
-                remaining_turns=duration,
-                is_percent=True
-            )
-            self.add_effect(battler, effect)
-        
-        # 고정값 효과
-        if 'Stat' in status_info:
-            effect = Effect(
-                effect_type='status',
-                effects=status_info['Stat'],
-                source=f"status_{status_name}",
-                remaining_turns=duration
-            )
-            self.add_effect(battler, effect)
-
     def apply_temporary_buff(self, battler, buff_name, effects, duration=None):
         """임시 버프 효과 적용"""
         # 퍼센트 효과
@@ -654,6 +643,15 @@ class EffectManager:
             )
             self.add_effect(battler, effect)
 
+    def apply_passive_effects(self, battler):
+        """패시브 효과를 적용"""
+        for effect in battler.effects:
+            if effect.type == 'passive_conditional':
+                if effect.check_condition(battler):
+                    # 조건을 충족한 경우 효과 적용
+                    for stat, value in effect.effects.items():
+                        if stat in battler.stats:
+                            battler.stats[stat] += value
 class MessageDialog:
     def __init__(self, messages, font, level):
         self.messages = messages
@@ -746,33 +744,4 @@ class MessageDialog:
                 self.is_instant = True
 
         return None
-            
-def import_csv_layout(path):
-    terrain_map = []
-    with open(path) as level_map:
-        layout = reader(level_map,delimiter = ',')
-        for row in layout:
-            terrain_map.append(list(row))
-        return terrain_map
-    
-def import_folder(path):
-    surface_list = []
-
-    for _,__,img_files in walk(path):
-        for image in img_files:
-            full_path = path + '/' + image
-            image_surf = pygame.image.load(full_path).convert_alpha()
-            surface_list.append(image_surf)
-            
-    return surface_list
-
-def determine_direction(prev_pos, current_pos):
-    """두 위치 사이의 방향을 결정"""
-    dx = current_pos[0] - prev_pos[0]
-    dy = current_pos[1] - prev_pos[1]
-    
-    if dx > 0: return 'right'
-    if dx < 0: return 'left'
-    if dy > 0: return 'down'
-    if dy < 0: return 'up'
             

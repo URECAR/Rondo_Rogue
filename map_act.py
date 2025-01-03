@@ -411,7 +411,7 @@ class MapAction:
                     remaining_turns=buff_duration,
                     is_percent=True
                 )
-                target.effects.append(effect)
+                self.effect_manager.add_effect(target, effect)
                 
             # 고정값 효과 적용
             if 'Buff' in skill_info:
@@ -421,7 +421,7 @@ class MapAction:
                     source=f"buff_{skill_name}",
                     remaining_turns=buff_duration
                 )
-                target.effects.append(effect)
+                self.effect_manager.add_effect(target, effect)
                 
             # 버프 시각 효과
             self.animation_manager.create_animation(
@@ -436,6 +436,7 @@ class MapAction:
             level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
             skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
             damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+            self.Acted.append([target,'Magic_Damage',damage])
 
             # 데미지 처리
             self.Damage(self.selected_battler, target, damage, "Magic")
@@ -445,20 +446,9 @@ class MapAction:
                 status_chances = skill_info['Status_%'].get(skill_level, {})
                 for status, chance in status_chances.items():
                     if random.random() * 100 < chance:
-                        effect = Effect(
-                            effect_type='status',
-                            effects=STATUS_PROPERTIES[status].get('Stat', {}),
-                            source=f"status_{status}",
-                            remaining_turns=3  # 기본 3턴
-                        )
+                        effect = Effect(effect_type='status',effects=STATUS_PROPERTIES[status].get('Stat', {}),source=f"status_{status}",remaining_turns=STATUS_PROPERTIES[status]['duration'])
                         if 'Stat_%' in STATUS_PROPERTIES[status]:
-                            effect_percent = Effect(
-                                effect_type='status',
-                                effects=STATUS_PROPERTIES[status]['Stat_%'],
-                                source=f"status_{status}_percent",
-                                remaining_turns=3,
-                                is_percent=True
-                            )
+                            effect_percent = Effect(effect_type='status',effects=STATUS_PROPERTIES[status]['Stat_%'],source=f"status_{status}_percent",remaining_turns=STATUS_PROPERTIES[status]['duration'],is_percent=True)
                             target.effects.append(effect_percent)
                         target.effects.append(effect)
                 self.effect_manager.update_effects(target)
@@ -618,35 +608,44 @@ class MapAction:
                         
         return tiles
 
+
 # map_act.py의 endturn 메서드에서 관련 부분 제거
     def endturn(self):
         """턴 종료 시 처리"""
         self.target_battler = None
         self.interacted_battlers = []
         self.level.cursor.SW_select = False
-
         if self.selected_battler:
             # 캐릭터 상태 변경
             self.selected_battler.inactive = True
             self.selected_battler.isfollowing_root = False
             self.selected_battler.selected = False
             self.selected_battler.priority = self.selected_battler.pos.y * TILESIZE
-
             # 턴 행동에 따른 activate_condition 초기화
             if not all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
-                if 'Magic' in self.Acted:
-                    self.selected_battler.activate_condition['Turn_Without_Magic'] = 0
-                if 'Skill' in self.Acted:
-                    self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
-                if 'Range' in self.Acted:
-                    self.selected_battler.activate_condition['Turn_Without_Range'] = 0
-                if 'Melee' in self.Acted:
-                    self.selected_battler.activate_condition['Turn_Without_Melee'] = 0
-                if 'Move' in self.Acted:
-                    self.selected_battler.activate_condition['Turn_Without_Move'] = 0
-
-                # if self.skill:
-                #     self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
+                # Check each action type using proper format
+                for actions in self.Acted:
+                    target = actions[0]
+                    action = actions[1]
+                    detail = actions[2] if len(actions) > 2 else None
+                    # Movement action
+                    if action == 'Move':
+                        self.selected_battler.activate_condition['Turn_Without_Move'] = 0
+                    
+                    # Magic casting action
+                    elif action == 'Magic_Casting':
+                        self.selected_battler.activate_condition['Turn_Without_Magic'] = 0
+                    # Skill casting action
+                    elif action == 'Use_Skill':
+                        self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
+                    
+                    # Range attack action
+                    elif action == 'Range':
+                        self.selected_battler.activate_condition['Turn_Without_Range'] = 0
+                    
+                    # Melee attack action
+                    elif action == 'Melee':
+                        self.selected_battler.activate_condition['Turn_Without_Melee'] = 0
 
             self.selected_battler = None
         
@@ -657,9 +656,11 @@ class MapAction:
             self.level.cursor.select_lock = False
             self.level.cursor.move_lock = False
             self.change_state('explore')
-        
-        self.Acted = []   
 
+        print(self.Acted)        
+
+        self.Acted = []   
+    
     def Damage(self, attacker, target, damage, damage_type, is_critical=False):
         """데미지 처리 및 관련 효과 적용"""
         # 현재 사용 중인 스킬의 스타일 확인

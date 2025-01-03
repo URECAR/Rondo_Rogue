@@ -284,7 +284,7 @@ class AI():
             
             if skill_info['shape'] != 'linear':
                 attackable_pos = self.map_action.check_magic_range(self.selected_battler, skill)
-                print(skill,attackable_pos)
+                # print(skill,attackable_pos)
                 single_kill_targets = []
                 double_kill_targets = []
                 other_targets = []
@@ -422,6 +422,7 @@ class AI():
                     return '이동'
             return '턴종료'
         return '턴종료'
+
     def execute(self):
         self.battler_init()
         # print(self.char_data)
@@ -438,7 +439,7 @@ class AI():
             self.execute_move_roots()
             return 'player_moving'
         elif result == '스킬사용':
-            return 'interact','skill'
+            return 'interact','skill0'
         elif result == '아이템사용':
             return 'interact','using_item1'
         elif result == '턴종료':

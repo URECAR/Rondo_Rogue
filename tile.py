@@ -103,7 +103,7 @@ class Tile(pygame.sprite.Sprite):
     @classmethod
     def update_path_tiles(cls, move_roots, visible_sprites, obstacle_sprites, selected_battler):
         """이동 경로의 타일들을 업데이트"""
-        from support import determine_direction
+        from common_method import determine_direction
         
         for i in range(len(move_roots)):
             current_tile = move_roots[i][0]

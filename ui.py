@@ -499,7 +499,8 @@ class UI():
                 )
 
                 # 스타일 적용 부분 수정
-                style_name = skill_info.get('style', 'default')
+                style_name = skill_info.get('Style', 'default')
+                
                 style = SKILL_STYLES[style_name]
                 
                 
@@ -864,7 +865,7 @@ class UI():
             
             # 스킬 스타일
             skill_info = SKILL_PROPERTIES[skill_name]
-            style_name = skill_info.get('style', 'default')
+            style_name = skill_info.get('Style', 'default')
             style = SKILL_STYLES[style_name]
             
             # 배경색 결정

@@ -2,7 +2,8 @@
 import pygame
 import os
 from properties import *
-from support import import_folder, EffectManager, Effect
+from support import  EffectManager, Effect
+from common_method import import_folder
 from database import MAP1
 from database import CharacterDatabase
 from database import SKILL_PROPERTIES, STATUS_PROPERTIES, EQUIP_PROPERTIES
@@ -124,6 +125,84 @@ class Character(pygame.sprite.Sprite):
 
         # 장비 효과 적용
         self.equips = char_data.get('equips', []).copy()
+        self.init_apply_equipment_effects()
+
+        # 패시브 스킬 효과 적용
+        self.init_apply_passive_skills()
+        print(self.effects)
+        self.Cur_HP = int(self.stats['Max_HP'])
+        self.Cur_MP = int(self.stats['Max_MP'])
+
+        self.exp = 0
+        self.tmp_exp_gain = 0
+        
+        self.force_inactive = False
+        self.activate_condition = {
+            'Turn': 0,
+            'Turn_Without_Magic': 0,
+            'Turn_Without_Melee': 0,
+            'Turn_Without_Range': 0,
+            'Turn_Without_Move': 0,
+            'Turn_Without_Skill': 0,
+            'Max_Damage': 0,     
+            'HP_ratio' : 0,
+            'MP_ratio' : 0,
+        }
+
+        # 마지막으로 모든 효과 적용하여 스탯 업데이트
+        self.effect_manager.update_effects(self)
+
+    def init_apply_passive_skills(self):
+        for skill_name, skill_level in self.skills.items():
+            skill_info = SKILL_PROPERTIES.get(skill_name)
+            
+            if not skill_info:
+                print(f"{skill_name} 스킬 불러오기 실패")
+                continue
+                
+            if skill_info['Type'] == 'Passive':
+                skill_passive_details = skill_info['Passive']
+                
+                if skill_passive_details['effect_type'] == 'constant':
+                    if 'stats_%' in skill_passive_details['effects'] and skill_passive_details['effects']['stats_%']:
+                        effect = Effect(
+                            effect_type='passive',
+                            effects=skill_passive_details['effects']['stats_%'][skill_level],
+                            source=f"passive_{skill_name}",
+                            is_percent=True
+                        )
+                        self.effects.append(effect)
+                    if 'stats' in skill_passive_details['effects'] and skill_passive_details['effects']['stats']:
+                        effect = Effect(
+                            effect_type='passive',
+                            effects=skill_passive_details['effects']['stats'][skill_level],
+                            source=f"passive_{skill_name}"
+                        )
+                        self.effects.append(effect)
+            
+                elif skill_passive_details['effect_type'] == 'conditional':
+                    condition = skill_passive_details['condition'].copy()
+                    condition['threshold'] = condition['threshold'][skill_level]
+
+                    if 'stats_%' in skill_passive_details['effects'] and skill_passive_details['effects']['stats_%']:
+                        effect = Effect(
+                            effect_type='passive_conditional',
+                            effects=skill_passive_details['effects']['stats_%'][skill_level],
+                            source=f"passive_conditional_{skill_name}",
+                            condition=condition,
+                            is_percent=True
+                        )
+                        self.effects.append(effect)
+                    if 'stats' in skill_passive_details['effects'] and skill_passive_details['effects']['stats']:
+                        effect = Effect(
+                            effect_type='passive_conditional',
+                            effects=skill_passive_details['effects']['stats'][skill_level],
+                            source=f"passive_conditional_{skill_name}",
+                            condition=condition,
+                        )
+                        self.effects.append(effect)
+
+    def init_apply_equipment_effects(self):
         for equip_name in self.equips:
             if equip_name in EQUIP_PROPERTIES:
                 equip_data = EQUIP_PROPERTIES[equip_name]
@@ -155,90 +234,13 @@ class Character(pygame.sprite.Sprite):
                     )
                     self.effects.append(effect)
 
-        # 패시브 스킬 효과 적용
-        for skill_name, skill_level in self.skills.items():
-            skill_info = SKILL_PROPERTIES.get(skill_name)
-            if not skill_info:
-                print(f"{skill_name} 스킬 불러오기 실패")
-                continue
-                
-            if skill_info['Type'] == 'Passive':
-                # print(f"\nApplying passive skill: {skill_name}")
-                # 퍼센트 기반 패시브 효과
-                if 'Buff_%' in skill_info:
-                    effect = Effect(
-                        effect_type='passive',
-                        effects=skill_info['Buff_%'][skill_level],
-                        source=f"passive_{skill_name}",
-                        is_percent=True
-                    )
-                    # print(f"Adding percent effect: {effect.effects}")
-                    self.effects.append(effect)
-                    
-                # 고정값 패시브 효과
-                if 'Buff' in skill_info:
-                    effect = Effect(
-                        effect_type='passive',
-                        effects=skill_info['Buff'][skill_level],
-                        source=f"passive_{skill_name}"
-                    )
-                    # print(f"Adding flat effect: {effect.effects}")
-                    self.effects.append(effect)
-            
-            elif skill_info['Type'] == 'Passive_Conditional':
-                # print(f"\nApplying conditional passive: {skill_name}")
-                condition = skill_info['Condition'][skill_level]
-                
-                # 퍼센트 기반 조건부 효과
-                if 'Buff_%' in skill_info:
-                    effect = Effect(
-                        effect_type='passive_conditional',
-                        effects=skill_info['Buff_%'][skill_level],
-                        source=f"passive_conditional_{skill_name}",
-                        condition=condition,
-                        is_percent=True
-                    )
-                    # print(f"Adding conditional percent effect: {effect.effects}")
-                    self.effects.append(effect)
-                    
-                # 고정값 조건부 효과
-                if 'Buff' in skill_info:
-                    effect = Effect(
-                        effect_type='passive_conditional',
-                        effects=skill_info['Buff'][skill_level],
-                        source=f"passive_conditional_{skill_name}",
-                        condition=condition
-                    )
-                    # print(f"Adding conditional flat effect: {effect.effects}")
-                    self.effects.append(effect)
-
-        self.Cur_HP = int(self.stats['Max_HP'])
-        self.Cur_MP = int(self.stats['Max_MP'])
-
-        self.exp = 0
-        self.tmp_exp_gain = 0
-        
-        self.force_inactive = False
-        self.activate_condition = {
-            'Turn': 0,
-            'Turn_Without_Magic': 0,
-            'Turn_Without_Melee': 0,
-            'Turn_Without_Range': 0,
-            'Turn_Without_Move': 0,
-            'Turn_Without_Skill': 0,
-            'Max_Damage': 0,     
-        }
-
-        # 마지막으로 모든 효과 적용하여 스탯 업데이트
-        self.effect_manager.update_effects(self)
-
     def update_facing_direction(self, target_pos):
         """이동 방향에 따라 facing 방향 업데이트"""
         dx, dy = target_pos
         
         if abs(dx) > abs(dy):
             self.facing = 'right' if dx > 0 else 'left'
-        else:
+        elif abs(dx) < abs(dy):
             self.facing = 'down' if dy > 0 else 'up'
 
     def act(self):
