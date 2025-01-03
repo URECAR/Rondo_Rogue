@@ -39,10 +39,18 @@ class Explore_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
     def enter(self):
-        if not hasattr(self, 'event_triggered') and self.map_action.current_phase == 'Ally' and is_adjacent(self.level.battlers["Player1"],self.level.battlers["Player2"]):
+        if (not hasattr(self, 'event_triggered')
+            and self.map_action.current_phase == 'Ally'
+            and "Player1" in self.level.battlers
+            and "Player2" in self.level.battlers
+            and is_adjacent(self.level.battlers["Player1"], self.level.battlers["Player2"])):
             self.event_triggered = True
             return ('event', 'Event1', 'explore')
-        elif not hasattr(self, 'event_triggered2') and self.map_action.current_phase == 'Ally' and is_adjacent(self.level.battlers["Player2"],self.level.battlers["Player3"]):
+        elif (not hasattr(self, 'event_triggered2')
+              and self.map_action.current_phase == 'Ally'
+              and "Player2" in self.level.battlers
+              and "Player3" in self.level.battlers
+              and is_adjacent(self.level.battlers["Player2"], self.level.battlers["Player3"])):
             self.event_triggered2 = True
             return ('event', 'Event2', 'explore')
             
@@ -104,6 +112,7 @@ class Player_Control_State(State):
         self.map_action.cur_moves = self.map_action.selected_battler.stats['Mov']
         self.map_action.level.visible_sprites.focus_on_target(self.map_action.selected_battler)
         self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves, show=True)
+        # print(self.map_action.selected_battler.effects)
     def exit(self):
         self.cursor.move_lock = True
         self.cursor.SW_select = False
@@ -365,7 +374,7 @@ class Phase_Change_State(State):
             for battler in self.level.battler_sprites:
                 if battler.team == self.map_action.current_phase:
                     # HP/MP 회복 처리
-                    print(battler.effects)
+                    # print(battler.effects)
                     status_effects = [effect for effect in battler.effects if effect.type == 'status']
                     # Turn 관련 카운터 증가
                     for key in battler.activate_condition:
@@ -400,8 +409,7 @@ class Interact_State(State):
         self.substate = ''
     def enter(self,state= None):
         if state:
-            self.substate = state
-        
+            self.substate = state        
     def exit(self):
         pass
     def update(self):
@@ -417,7 +425,7 @@ class Interact_State(State):
                     
                 char_data = CharacterDatabase.data.get(self.map_action.selected_battler.char_type, {})
                 if char_data.get('Class') == 'Melee':
-                    self.map_action.current_Class = 'Melee'
+                    self.map_action.Acted.append('Melee')
                     self.map_action.selected_battler.isfollowing_root = False
                     self.map_action.selected_battler.actlist.append('act_for_attack')
                     self.map_action.update_time = pygame.time.get_ticks() + self.map_action.selected_battler.attack_delay
@@ -430,87 +438,59 @@ class Interact_State(State):
                 # 공격 효과 계산 및 적용
                 attacker = self.map_action.selected_battler
                 target = self.map_action.target_battler
-                opposite_directions = {
-                    "left": "right",
-                    "right": "left",
-                    "up": "down",
-                    "down": "up"
-                }
-                # 방향에 따른 데미지 계산
+                opposite_directions = {"left": "right","right": "left","up": "down","down": "up"}
                 hit_location = 'front'
                 if target.facing == attacker.facing:
                     hit_location = 'rear'
                 elif target.facing != opposite_directions.get(attacker.facing):
                     hit_location = 'side'
-                    
-                # 전투 효과 적용 (위치 기반 버프/디버프)
-                self.map_action.apply_combat_effects(attacker, target, hit_location)
-                
+                Damage_Bonus_multiplier = 1.25 if hit_location == 'rear' else 1.1 if hit_location == 'side' else 1
+                ZOC_vurnerable = 15 if hit_location == 'rear' else 10 if hit_location == 'side' else 5      # ZOC 취약
+                evasion_vurnerable = 15 if hit_location == 'rear' else 5 if hit_location == 'side' else 0
+                counter_vurnerable = 15 if hit_location == 'rear' else 5 if hit_location == 'side' else 0
+                critical_vurnerable = 8 if hit_location == 'rear' else 4 if hit_location == 'side' else 0
+
                 # 카운터 확인
-                total_counter_chance = (
-                    target.stats["Counter_Chance"] + 
-                    (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5
-                ) * 0.01
-                
+                total_counter_chance = (target.stats["Counter_Chance"] + (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5 + counter_vurnerable) * 0.01
+                                
                 if total_counter_chance > random.random():
-                    self.map_action.animation_manager.create_animation(
-                        attacker.collision_rect.center, 'EMOTE_SURPRISE', wait=True)
+                    self.map_action.animation_manager.create_animation(attacker.collision_rect.center, 'EMOTE_SURPRISE', wait=True)
                     target.battle_return(attacker, move_type='counter')
                     self.map_action.update_time = pygame.time.get_ticks() + 500
                     return 'interact','melee_counter1'
                     
                 # 히트 체크
-                hit_chance = (
-                    1 + ((attacker.stats["DEX"] - target.stats["DEX"]) * 2 +
-                    attacker.stats["Accuracy_rate"] - 
-                    target.stats["Melee_evasion_chance"]) * 0.01
-                )
+                total_hit_chance = (1 + ((attacker.stats["DEX"] - target.stats["DEX"]) * 2 + attacker.stats["Accuracy_rate"] - target.stats["Melee_evasion_chance"] - evasion_vurnerable) * 0.01)
                 
-                if hit_chance < random.random():
+                if total_hit_chance < random.random():
                     target.battle_return(attacker, move_type='evasion')
                     self.map_action.sound_manager.play_sound(**SOUND_PROPERTIES['EVASION'])
                     return 'interact','melee2'
                     
                 # 크리티컬 확인
-                crit_chance = (attacker.stats["Critical_Chance"] + 
-                        attacker.stats["DEX"] * 0.5) * 0.01
-                
-                if random.random() < crit_chance:
-                    self.map_action.animation_manager.create_animation(
-                        (target.collision_rect.centerx, target.collision_rect.centery),
-                        'CRITICAL',
-                        wait=True
-                    )
+                total_crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.5 + critical_vurnerable) * 0.01
+                is_critical = False
+
+                if random.random() < total_crit_chance:
+                    self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'CRITICAL',wait=True)
+                    is_critical = True
+                    damage = (attacker.stats['STR'] * 2 - target.stats['RES']) * (attacker.stats["Melee_attack_multiplier"] * target.stats["Melee_defense_multiplier"]) * Damage_Bonus_multiplier * attacker.stats["Critical_attack_multiplier"]
+                else:
+                    damage = (attacker.stats['STR'] * 2 - target.stats['RES']) * (attacker.stats["Melee_attack_multiplier"] * target.stats["Melee_defense_multiplier"]) * Damage_Bonus_multiplier
                     
-                # 데미지 계산 및 적용
-                damage = (attacker.stats['STR'] * 2 - target.stats['RES']) * (
-                    attacker.stats["Melee_attack_multiplier"] * 
-                    target.stats["Melee_defense_multiplier"]
-                )
-                
-                if damage < 0:
-                    damage = 0
-                    
+                damage = max(damage, 0)
+                                    
                 self.map_action.animation_manager.clear_active_animations()
-                self.map_action.animation_manager.create_animation(
-                    (target.collision_rect.centerx, target.collision_rect.centery),
-                    'SLASH',
-                    wait=True
-                )
+                self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'SLASH',wait=True)
                 
                 target.battle_return(attacker, move_type='knockback')
-                self.map_action.Damage(attacker, target, damage, "Melee")
+                self.map_action.Damage(attacker, target, damage, "Melee", is_critical=is_critical)
                 
                 # ZOC 처리는 이제 효과로 처리됨
-                zoc_check = (target.stats["ZOC_Chance"] - 
-                        attacker.stats["ZOC_Ignore_Chance"]) * 0.01
+                total_zoc_check = (target.stats["ZOC_Chance"] - attacker.stats["ZOC_Ignore_Chance"] - ZOC_vurnerable) * 0.01
                         
-                if target.Cur_HP > 0 and random.random() < zoc_check:
-                    self.map_action.animation_manager.create_animation(
-                        (target.collision_rect.midtop[0], target.collision_rect.midtop[1]),
-                        'SHIELD',
-                        wait=True
-                    )
+                if target.Cur_HP > 0 and random.random() < total_zoc_check:
+                    self.map_action.animation_manager.create_animation((target.collision_rect.midtop[0], target.collision_rect.midtop[1]),'SHIELD',wait=True)
                     # 이동 취소
                     while self.map_action.move_roots:
                         self.map_action.move_roots[-1][0].kill()
@@ -544,14 +524,8 @@ class Interact_State(State):
 
                 # 이동 적용
                 if gotopos is not None:
-                    self.map_action.selected_battler.Goto.x += (
-                        gotopos[0] * TILESIZE - 
-                        self.map_action.selected_battler.return_tile_location()[0]
-                    )
-                    self.map_action.selected_battler.Goto.y += (
-                        gotopos[1] * TILESIZE - 
-                        self.map_action.selected_battler.return_tile_location()[1]
-                    )
+                    self.map_action.selected_battler.Goto.x += (gotopos[0] * TILESIZE - self.map_action.selected_battler.return_tile_location()[0])
+                    self.map_action.selected_battler.Goto.y += (gotopos[1] * TILESIZE - self.map_action.selected_battler.return_tile_location()[1])
                     self.map_action.selected_battler.ismove = True
                     self.map_action.selected_battler.pos = pygame.math.Vector2(gotopos[0], gotopos[1])
 
@@ -657,12 +631,13 @@ class Interact_State(State):
                 return 'interact','melee_counter3'
 
             elif self.substate == 'melee_counter3' and self.map_action.update_time < pygame.time.get_ticks():
+                self.level.visible_sprites.focus_on_target(self.map_action.selected_battler, cursor_obj=self.level.cursor)
                 return 'interact','after_battle'
-
 #   원거리 공격 처리
         elif self.substate[:5] == 'range':
             self.level.cursor.move_lock = True
             if self.substate == 'range0':
+                self.map_action.Acted.append('Range')
                 self.level.cursor.move_lock = True
                 self.map_action.highlight_tiles_set(None,mode='Clear')
                 self.map_action.visible_sprites.focus_on_target(self.map_action.selected_battler)
@@ -703,30 +678,19 @@ class Interact_State(State):
                     ) * target.stats["Ranged_defense_multiplier"] * attacker.stats["Ranged_attack_multiplier"]
 
                     # 크리티컬 판정
-                    crit_chance = (
-                        attacker.stats["Critical_Chance"] + 
-                        attacker.stats["DEX"] * 0.6
-                    ) * 0.01
-
+                    crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.6) * 0.01
+                    is_critical = False
                     if random.random() < crit_chance:
-                        self.map_action.animation_manager.create_animation(
-                            (target.collision_rect.centerx, target.collision_rect.centery),
-                            'CRITICAL',
-                            wait=True
-                        )
+                        self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'CRITICAL',wait=True)
                         damage *= attacker.stats["Critical_attack_multiplier"]
-
+                        is_critical = True
                     # 공격 효과 애니메이션
                     self.map_action.animation_manager.clear_active_animations()
-                    self.map_action.animation_manager.create_animation(
-                        target.collision_rect.center,
-                        'RANGE_HIT',
-                        wait=True
-                    )
+                    self.map_action.animation_manager.create_animation(target.collision_rect.center,'RANGE_HIT',wait=True)
                     target.battle_return(attacker, move_type='knockback')
 
                     # 데미지 적용
-                    self.map_action.Damage(attacker, target, damage, "Range")
+                    self.map_action.Damage(attacker, target, damage, "Range",is_critical=is_critical)
 
                 else:
                     target.battle_return(attacker, move_type='range_evasion')
@@ -736,6 +700,7 @@ class Interact_State(State):
                 return 'interact','range3'
 
             elif self.substate == 'range3' and self.map_action.update_time < pygame.time.get_ticks():
+                self.level.visible_sprites.focus_on_target(self.map_action.selected_battler, cursor_obj=self.level.cursor)
                 return 'interact','after_battle'
 #   스킬 애니메이션 생성 처리(_skill), 배틀러가 행동(casting)을 마무리할 때 처리 시작
         elif self.substate[:5] == 'skill':
@@ -748,6 +713,14 @@ class Interact_State(State):
                 skill_mana = SKILL_PROPERTIES[skill_name].get('Mana', {}).get(skill_level, 0)
                 attacker.Cur_MP -= skill_mana
 
+                # 시전한 게 스킬인지 마법인지 확인
+                if SKILL_PROPERTIES[skill_name].get('style','skill') == 'magic':
+                    self.map_action.Acted.append('Magic')
+                    # print("MAGIC")
+                else:
+                    self.map_action.Acted.append('Skill')
+                    # print("SKILL")
+                
                 # 스킬 캐스팅 설정
                 self.level.visible_sprites.focus_on_target(attacker)
                 self.level.cursor.rect.center = attacker.collision_rect.center
@@ -782,7 +755,7 @@ class Interact_State(State):
                 
                 if targets:
                     first_target = targets[0]
-                    self.level.visible_sprites.focus_on_target(first_target)
+                    # self.level.visible_sprites.focus_on_target(first_target)
                 
                 skill_info = SKILL_PROPERTIES[self.map_action.skill]
                 animate_type = skill_info.get('animate_type', 'default')
@@ -843,11 +816,7 @@ class Interact_State(State):
                         else [self.map_action.target_battler])
                 
                 for target in targets:
-                    self.map_action.apply_skill_effects(
-                        target,
-                        self.map_action.skill,
-                        self.map_action.selected_battler.skills[self.map_action.skill]
-                    )
+                    self.map_action.apply_skill_effects(target,self.map_action.skill,self.map_action.selected_battler.skills[self.map_action.skill])
                     
                 return 'interact', 'skill3'
                 
@@ -980,7 +949,6 @@ class Select_Magic_Target_State(State):
                 self.map_action.temp_facing = new_facing
                 
                 self.map_action.highlight_tiles_set(None,mode='Clear')
-                self.map_action.check_magic_range(self.map_action.selected_battler,self.map_action.skill)
                 attackable_pos = self.map_action.check_magic_range(self.map_action.selected_battler,self.map_action.skill)
                 self.map_action.highlight_tiles_set([pygame.math.Vector2(x,y)for x , y in attackable_pos], mode = 'Set')
 
@@ -1000,7 +968,6 @@ class Select_Magic_Target_State(State):
                 self.level.cursor.clicked_self = False
             skill_type = SKILL_PROPERTIES[self.map_action.skill].get('skill_type', {})
             skill_targets = SKILL_PROPERTIES[self.map_action.skill]['target']
-            self.map_action.current_Class = 'Magic'
             # 강조된 타일 위에 커서가 올려졌을 때 조건문 실행
             if any(self.level.cursor.pos == pygame.math.Vector2(attackable_tile.rect.topleft[0] // TILESIZE, attackable_tile.rect.topleft[1] // TILESIZE) for attackable_tile in self.map_action.highlight_tiles):
                 # 단일 타게팅 
@@ -1009,9 +976,7 @@ class Select_Magic_Target_State(State):
                     for battler in self.level.battler_sprites:
                         if self.level.cursor.pos == battler.pos:
             # 타게팅 분류
-                            if (('Self_Ally' in skill_targets and (battler.team == self.map_action.selected_battler.team)) or
-                                ('Self_Ally_except_Self' in skill_targets and (battler.team == self.map_action.selected_battler.team) and battler != self.map_action.selected_battler) or
-                                ('Self_Enemy' in skill_targets and not (battler.team == self.map_action.selected_battler.team))):
+                            if istarget(self.map_action.skill,self.map_action.selected_battler,battler):
                                 self.map_action.target_battler = battler
                                 break
                 # 범위 타게팅 수정
@@ -1022,10 +987,7 @@ class Select_Magic_Target_State(State):
                     
                     for battler in self.level.battler_sprites:
                         if battler.pos in skill_area:
-                            team_match = (battler.team == self.map_action.selected_battler.team)
-                            if (('Self_Ally' in skill_targets and team_match) or
-                                ('Self_Ally_except_Self' in skill_targets and team_match and battler != self.map_action.selected_battler) or
-                                ('Self_Enemy' in skill_targets and not team_match)):
+                            if istarget(self.map_action.skill,self.map_action.selected_battler,battler):
                                 self.map_action.target_battler.append(battler)
 
                 # 타겟이 있으면 확인 대화상자 표시
@@ -1037,7 +999,6 @@ class Select_Range_Target_State(State):
     def enter(self):
         self.cursor.move_lock = False
         attack_range = CharacterDatabase.data.get(self.map_action.selected_battler.char_type, {}).get('Range')
-        self.map_action.current_Class = 'Range'
         # 다이아몬드 형태의 범위 계산
         diamond = [(dx, dy) for dx in range(-attack_range, attack_range + 1) 
                 for dy in range(-attack_range, attack_range + 1) 
@@ -1118,9 +1079,7 @@ class Select_Item_Target_State(State):
                     self.map_action.highlight_tiles_set(None,mode='Clear')
                     
                     # 아이템 사용
-                    item_data = ITEM_PROPERTIES[self.map_action.item_to_use]
-                    if 'animate' in item_data:
-                        self.map_action.animation_manager.create_animation(self.map_action.target_battler,item_data['animate'],wait=True)
+
                     self.map_action.current_dialog = None
                     return 'interact','using_item1'
                 else:
@@ -1151,15 +1110,7 @@ class Select_Item_Target_State(State):
             if self.map_action.target_battler:
                 self.map_action.current_dialog = ConfirmationDialog("사용하시겠습니까?")
                 return
-                    
-            if self.map_action.target_battler:
-                self.map_action.level.cursor.move_lock = True
-                # 타일 제거
-                self.map_action.highlight_tiles_set(None,mode='Clear')
-                
-                # 아이템 사용
 
-                return 'interact','using_item1'
 class Event_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
@@ -1169,8 +1120,8 @@ class Event_State(State):
         
     def enter(self, event_queue, return_state):
         Event_List = {
-            "Event1": ["첫번째 이벤트입니다.", "메세지입니다."],
-            "Event2": ["두번째 이벤트입니다.", "또 다른 메세지입니다."]
+            "Event1": ["이벤트1입니다. Player1과 Player2가 근접했을 경우 실행됩니다.", " 이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다."],
+            "Event2": ["이벤트2입니다. Player2와 Player3이 근접했을 경우 실행됩니다.", " 이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다."],
         }
         if event_queue in Event_List:
             self.event_queue = Event_List[event_queue]
@@ -1192,10 +1143,15 @@ class Event_State(State):
         self.message_dialog.update()
         self.message_dialog.render()
         
-        if (self.map_action.input_manager.is_just_pressed('Select') or 
-            self.map_action.input_manager.is_left_click()):
-            if self.message_dialog and self.message_dialog.finished:
-                self.message_dialog = None
-                return self.next_event()
-            elif self.message_dialog and not self.message_dialog.finished:
+        # Handle Cancel key for instant text display
+        if self.map_action.input_manager.is_just_pressed('Cancel'):
+            if self.message_dialog and not self.message_dialog.finished:
                 self.message_dialog.finish_current_message()
+                return
+                
+        # Handle Select key or left click for next message
+        if ((self.map_action.input_manager.is_just_pressed('Select') or 
+             self.map_action.input_manager.is_left_click()) and 
+            self.message_dialog and self.message_dialog.finished):
+            self.message_dialog = None
+            return self.next_event()

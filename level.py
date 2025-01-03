@@ -183,11 +183,11 @@ class Level:
         self.visible_sprites.update()
         self.map_action.update()
         self.ui.display()
-        debug(self.battlers['Player1'].effect_manager.get_active_effects(self), x = 150)
-        debug(self.cursor.pos)
-        debug(self.map_action.current_state, x = 70)
-        debug(self.map_action.elapsed_turn, y= 50)
-        debug(self.battlers['Player1'].effects, y= 70)
+        # debug(self.battlers['Player1'].effect_manager.get_active_effects(self), x = 150)
+        # debug(self.cursor.pos)
+        # debug(self.map_action.current_state, x = 70)
+        # debug(self.map_action.elapsed_turn, y= 50)
+        # debug(self.battlers['Player1'].effects, y= 70)
 class YSortCameraGroup(pygame.sprite.Group):
     def __init__(self):
         super().__init__()

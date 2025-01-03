@@ -31,9 +31,9 @@ class SoundManager:
         self.sound_cache = {}
         
         # 기본 볼륨 설정
-        self.master_volume = 0.0  # 전체 볼륨 (0.0 ~ 1.0)
-        self.bgm_volume = 0.4     # BGM 볼륨 (0.0 ~ 1.0)
-        self.sfx_volume = 0.4     # 효과음 볼륨 (0.0 ~ 1.0)
+        self.master_volume = INITIAL_MASTER_VOLUME  # 전체 볼륨 (0.0 ~ 1.0)
+        self.bgm_volume = INITIAL_MUSIC_VOLUME     # BGM 볼륨 (0.0 ~ 1.0)
+        self.sfx_volume = INITIAL_SFX_VOLUME     # 효과음 볼륨 (0.0 ~ 1.0)
         
         # 현재 재생 중인 BGM 트랙
         self.current_bgm = None
@@ -701,7 +701,8 @@ class MessageDialog:
         # Draw text
         for i, line in enumerate(lines):
             text_surface = self.font.render(line, True, (255, 255, 255))
-            self.display_surface.blit(text_surface, (self.x + 20, self.y + 20 + i * self.line_height))
+            text_rect = text_surface.get_rect(topleft=(self.x + 20, self.y + 20 + i * self.line_height))
+            self.display_surface.blit(text_surface, text_rect)
         
         # Draw continue indicator if message is complete
         if self.finished:

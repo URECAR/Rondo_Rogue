@@ -23,7 +23,6 @@ class Animation(pygame.sprite.Sprite):
             sound_key = self.props['sound']          
             self.sound_manager.play_sound(**SOUND_PROPERTIES[sound_key])
             
-        
         if animation_type == 'SPREAD_LINE':
             self.split_time = self.props['split_time']
             self.split_speed = self.props['split_speed']
@@ -43,11 +42,11 @@ class Animation(pygame.sprite.Sprite):
             else:
                 raise ValueError("SPREAD_LINE animation requires a sprite object")
                 
-        elif animation_type == 'DAMAGE':
+        elif animation_type == 'DAMAGE' or animation_type == 'CRITICAL_DAMAGE':
             self.value = value
             self.elapsed_time = 0
             self.y_offset = 0
-            self.setup_damage_animation(start_pos)
+            self.setup_damage_animation(start_pos, type = animation_type)
 
         elif animation_type == 'PHASE_CHANGE':
             self.duration = self.props['duration']
@@ -155,7 +154,7 @@ class Animation(pygame.sprite.Sprite):
         if self.animation_type == 'SPREAD_LINE':
             self.update_spread_animation()
 
-        elif self.animation_type == 'DAMAGE':
+        elif self.animation_type == 'DAMAGE' or self.animation_type == 'CRITICAL_DAMAGE':
             self.update_damage_animation()
 
         elif self.animation_type == 'PHASE_CHANGE':
@@ -188,10 +187,13 @@ class Animation(pygame.sprite.Sprite):
             raise IsADirectoryError(f"애니메이션을 불러오지 못함: {self.folder_path}")
         self.image = self.animation_frames[0]
 
-    def setup_damage_animation(self, start_pos):
+    def setup_damage_animation(self, start_pos,type):
         """데미지/힐 텍스트 애니메이션 설정"""
         # 폰트 및 색상 설정
-        font = pygame.font.Font(UI_FONT, 36)
+        if type == 'DAMAGE':
+            font = pygame.font.Font(UI_FONT, 36)
+        elif type == 'CRITICAL_DAMAGE':
+            font = pygame.font.Font(UI_FONT, 48)
         text = str(abs(int(self.value)))  # 절대값 사용
         
         # 힐링(양수)과 데미지(음수)에 따라 다른 색상 설정
@@ -200,8 +202,13 @@ class Animation(pygame.sprite.Sprite):
             text_color = (0, 255, 0)  # 초록색
             outline_color = (255, 255, 255)  # 흰색
         else:  # 데미지
-            text_color = (255, 0, 0)  # 빨간색
-            outline_color = (0, 0, 0)  # 검은색
+            if type == 'DAMAGE':
+                text_color = (255, 0, 0)  # 빨간색
+                outline_color = (0, 0, 0)  # 검은색
+            elif type == 'CRITICAL_DAMAGE':
+                text_color = (255, 215, 0)  # 금색
+                outline_color = (255, 0, 0)  # 빨간 테두리
+                glow_color = (255, 69, 0)  # 주황색 글로우
         
         # 메인 텍스트
         self.text_surface = font.render(text, True, text_color)

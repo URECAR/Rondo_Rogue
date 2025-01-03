@@ -540,34 +540,30 @@ class Character(pygame.sprite.Sprite):
             self.deathing()
         elif not self.isdead:
             # force_inactive가 True면 행동 불가
-            if not self.force_inactive:
-                self.hp_bar.update()
-                if self.actlist:   
-                    self.act()
-                if self.ismove: 
-                    self.move()
-                if self.isknockback_move:
-                    self.play_animation('hit')
-                    self.knockback()
-                if self.isfollowing_root:
-                    if 'move' in self.animation_types:
-                        self.play_animation('move')
-                else:
-                    if self.actlist and self.actlist[0] == 'act_for_attack':
-                        self.play_animation('attack')
-                    elif self.actlist and self.actlist[0] == 'range_attack':
-                        self.play_animation('range')
-                    elif self.casting and 'casting' in self.animation_types: 
-                        self.play_animation('casting')
-                    elif self.selected and 'selected' in self.animation_types:
-                        self.play_animation('selected')
-                    elif 'idle' in self.animation_types:
-                        self.play_animation('idle')
+
+            self.hp_bar.update()
+            if self.actlist:   
+                self.act()
+            if self.ismove: 
+                self.move()
+            if self.isknockback_move:
+                self.play_animation('hit')
+                self.knockback()
+            if self.isfollowing_root:
+                if 'move' in self.animation_types:
+                    self.play_animation('move')
             else:
-                # 빙결 상태일 때도 HP 바와 애니메이션은 업데이트
-                self.hp_bar.update()
-                if 'idle' in self.animation_types:
+                if self.actlist and self.actlist[0] == 'act_for_attack':
+                    self.play_animation('attack')
+                elif self.actlist and self.actlist[0] == 'range_attack':
+                    self.play_animation('range')
+                elif self.casting and 'casting' in self.animation_types: 
+                    self.play_animation('casting')
+                elif self.selected and 'selected' in self.animation_types:
+                    self.play_animation('selected')
+                elif 'idle' in self.animation_types:
                     self.play_animation('idle')
+
             
     def return_tile_location(self):
         """충돌 감지용 rect의 위치 반환"""

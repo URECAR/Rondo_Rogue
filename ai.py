@@ -4,6 +4,7 @@ import pygame
 from tile import Tile
 from properties import *
 import random
+from common_method import istarget
 class AI():
     def __init__(self,map_action):
         self.map_action = map_action
@@ -21,6 +22,7 @@ class AI():
         self.battlersEnemies = [battler for battler in self.level.battler_sprites if battler.team != self.selected_battler.team]
         self.result_temp_move_roots = []
         self.afterattack_move_type = '후퇴'
+        
     def melee_ai(self):
         temp_move_roots = []
         
@@ -264,73 +266,135 @@ class AI():
             return '턴종료'
 
     def magic_ai(self):
-        # print("AMGIC")
-        # skills = self.selected_battler.skills
-        # for skill_name, skill_level in skills.items():
-        #     skill_info = SKILL_PROPERTIES.get(skill_name)
-        #     if skill_info is None:
-        #         print(f"{skill_name} 스킬 불러오기 실패")
-        #         continue
+        # 1. 시전가능한 스킬 조사
+        result = []
+        usable_skills = []
+        for skill in self.selected_battler.skills:
+            if SKILL_PROPERTIES[skill].get('style') == 'magic' and self.selected_battler.Cur_MP >= SKILL_PROPERTIES[skill]['Mana'][self.selected_battler.skills[skill]]:
+                print(f"사용가능한 스킬 {skill},LV.{self.selected_battler.skills[skill]}")
+                usable_skills.append(skill)
+        if not usable_skills:
+            if 'MP_Potion' in self.selected_battler.inventory:
+                self.map_action.item_to_use = 'MP_Potion'
+                self.map_action.target_battler = self.selected_battler
+                return '아이템사용'
             
-        #     if skill_info.get('Type') == 'Active' and skill_info.get('skill_type') != 'buff':
-        #         attackable_targets = self.detect_attackable_target(self.selected_battler,skill_name)
-                
-                # attackable_targets = self.detect_attackable_target(self.selected_battler,skill_name,skill_level)
+        for skill in usable_skills:
+            skill_info = SKILL_PROPERTIES[skill]
+            
+            if skill_info['shape'] != 'linear':
+                attackable_pos = self.map_action.check_magic_range(self.selected_battler, skill)
+                print(skill,attackable_pos)
+                single_kill_targets = []
+                double_kill_targets = []
+                other_targets = []
+                for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
+                    if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler):
+                        target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
+                        level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
+                        skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
+                        virtual_damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+
+                        if skill_info['skill_type'] == 'Targeting_all':
+                            if battler.Cur_HP <= virtual_damage:
+                                single_kill_targets.append(battler)
+                            elif battler.Cur_HP <= (virtual_damage * 2):
+                                double_kill_targets.append(battler)
+                            else:
+                                other_targets.append(battler)
+                        elif skill_info['skill_type'] == 'Targeting':
+                            if battler.Cur_HP <= virtual_damage:
+                                single_kill_targets = [battler]
+                                double_kill_targets = []  # Changed from None to empty list
+                                other_targets = []  # Changed from None to empty list
+                                break
+                            elif battler.Cur_HP <= (virtual_damage * 2):
+                                single_kill_targets = []
+                                double_kill_targets = [battler]
+                                other_targets = []  # Changed from None to empty list
+                            else:
+                                single_kill_targets = []
+                                double_kill_targets = []
+                                other_targets = [battler]
+                result.append([skill, single_kill_targets, double_kill_targets, other_targets])
                     
-            
+            elif skill_info['shape'] == 'linear':
+                for facing in ['up','left','down','right']:
+                    self.map_action.temp_facing = facing
+                    attackable_pos = self.map_action.check_magic_range(self.selected_battler, skill)
+                    single_kill_targets = []
+                    double_kill_targets = []
+                    other_targets = []
+                    for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
+                        if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler) and battler.team != self.selected_battler.team:
+                            target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
+                            level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
+                            skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
+                            virtual_damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+
+                            if battler.Cur_HP <= virtual_damage:
+                                single_kill_targets.append(battler)
+                            elif battler.Cur_HP <= (virtual_damage * 2):
+                                double_kill_targets.append(battler)
+                            else:
+                                other_targets.append(battler)
+                    result.append([skill+"_"+facing, single_kill_targets, double_kill_targets, other_targets])
+                    
+        # print(result)   
+        selected_skill = None
+        selected_direction = None
+        selected_targets = []
+        max_targets = 0
         
-        skill_name = '아이스'
-        skill_info = SKILL_PROPERTIES[skill_name]
-        skill_range = skill_info['Range'][self.selected_battler.skills[skill_name]]
-        skill_mana = skill_info['Mana'][self.selected_battler.skills[skill_name]]
-        sense_enemy = skill_range + self.selected_battler.stats['Mov']
-        if self.selected_battler.Cur_MP >= skill_mana:
-            attackable_targets = []
-            for battler in self.level.battler_sprites:
-                if battler.team != self.selected_battler.team:
-                    distance = abs(battler.pos.x - self.selected_battler.pos.x) + abs(battler.pos.y - self.selected_battler.pos.y)
-                    if distance <= skill_range:
-                        attackable_targets.append(battler)
+        for skill_info in result:
+            skill_name = skill_info[0]
+            # 모든 타겟을 하나의 리스트로 합침 (이제 None 값이 없으므로 안전하게 연결 가능)
+            all_targets = skill_info[1] + skill_info[2] + skill_info[3]
             
-            if attackable_targets:
-                # 우선순위 1: 한번에 처리가능한 적
-                for target in attackable_targets:
-                    virtual_damage = (self.selected_battler.stats['INT'] * skill_info['Dmg_Coff'][self.selected_battler.skills[skill_name]]) - target.stats['RES']
-                    if target.Cur_HP <= virtual_damage:
-                        self.map_action.target_battler = target
-                        self.map_action.skill = skill_name
-                        return '스킬사용'
+            if len(all_targets) > max_targets:
+                max_targets = len(all_targets)
+                # 방향이 있는 스킬인 경우 분리
+                if '_' in skill_name:
+                    base_skill, direction = skill_name.rsplit('_', 1)
+                    selected_skill = base_skill
+                    selected_direction = direction
+                else:
+                    selected_skill = skill_name
+                    selected_direction = None
+                selected_targets = all_targets
+
+        if selected_skill and selected_targets:
+            # 방향이 있는 경우 설정
+            if selected_direction:
+                self.map_action.temp_facing = selected_direction
                 
-                # 우선순위 2: CHA가 가장 높은 적
-                target = max(attackable_targets, key=lambda b: b.stats['CHA'])
-                self.map_action.target_battler = target
-                self.map_action.skill = skill_name
-                return  '스킬사용'
-            
-            # 공격 대상이 없으면 접근
-            
-            sense_target_list = []
-            for battler in self.level.battler_sprites:
-                if battler.team != self.selected_battler.team:
-                    distance = abs(battler.pos.x - self.selected_battler.pos.x) + abs(battler.pos.y - self.selected_battler.pos.y)
-                    if distance <= sense_enemy:
-                        sense_target_list.append(battler)
-            if sense_target_list:
-                target = max(sense_target_list, key=lambda b: b.stats['CHA'])
-                paths = self.map_action.find_approach_path(self.selected_battler.pos, target.pos, self.selected_battler.stats['Mov'], sense_enemy)
-                if paths:
-                    route = paths[0][1]
-                    valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
-                    if valid_route:
-                        self.result_temp_move_roots = valid_route
-                        # self.execute_move_roots()
-                        return '이동'
-                return '턴종료'
-        
-        # 마나가 부족하면 아이템 사용
-        if 'MP_Potion' in self.selected_battler.inventory:
-            self.map_action.use_item(self.selected_battler, 'MP_Potion')
-            return '아이템사용'
+            self.map_action.skill = selected_skill
+            # Create highlight tiles for the skill
+            attackable_pos = self.map_action.check_magic_range(self.selected_battler, selected_skill)
+            self.map_action.highlight_tiles_set([pygame.math.Vector2(pos[0], pos[1]) for pos in attackable_pos], mode='Set', color='yellow')
+            self.map_action.highlight_tiles_set(None, mode='Invisible')
+            self.map_action.target_battler = selected_targets
+            return '스킬사용'
+
+        # 2. 시전가능한 스킬이 없으면 아군 무리로 이동
+        sense_enemy = 12
+        # 공격 대상이 없으면 접근
+        sense_target_list = []
+        for battler in self.level.battler_sprites:
+            if battler.team != self.selected_battler.team:
+                distance = abs(battler.pos.x - self.selected_battler.pos.x) + abs(battler.pos.y - self.selected_battler.pos.y)
+                if distance <= sense_enemy:
+                    sense_target_list.append(battler)
+        if sense_target_list:
+            target = max(sense_target_list, key=lambda b: b.stats['CHA'])
+            paths = self.map_action.find_approach_path(self.selected_battler.pos, target.pos, self.selected_battler.stats['Mov'], sense_enemy)
+            if paths:
+                route = paths[0][1]
+                valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
+                if valid_route:
+                    self.result_temp_move_roots = valid_route
+                    return '이동'
+            return '턴종료'
         
         # 아이템도 없으면 아군 무리로 이동
         ally_positions = [battler.pos for battler in self.level.battler_sprites if battler.team == self.selected_battler.team and battler != self.selected_battler]
@@ -342,7 +406,6 @@ class AI():
                 valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
                 if valid_route:
                     self.result_temp_move_roots = valid_route
-                    # self.execute_move_roots()
                     return '이동'
             return '턴종료'
         
@@ -356,39 +419,9 @@ class AI():
                 valid_route = [pygame.math.Vector2(pos) for pos, cost in route[1:] if cost <= self.selected_battler.stats['Mov']]
                 if valid_route:
                     self.result_temp_move_roots = valid_route
-                    # self.execute_move_roots()
                     return '이동'
             return '턴종료'
-    # def detect_attackable_target(self,battler,skill_name):
-    #     skill_info = SKILL_PROPERTIES.get(skill_name)
-    #     skill_mana = skill_info['Mana'][battler.skills[skill_name]]
-    #     skill_range = skill_info['Range'][battler.skills[skill_name]]
-    #     skill_type = skill_info['skill_type']
-    #     skill_target = skill_info['Target']
-    #     Shape = skill_info['Shape']
-    #     attackable_targets = [] 
-    #     if skill_mana > battler.Cur_MP:
-    #         return []
-        
-    #     if Shape == 'Diamond':
-    #         for battler in self.level.battler_sprites:
-    #             if battler.team != self.selected_battler.team:
-    #                 distance = abs(battler.pos.x - self.selected_battler.pos.x) + abs(battler.pos.y - self.selected_battler.pos.y)
-    #                 if distance <= skill_range:
-    #                     attackable_targets.append(battler)
-    #         if len(attackable_targets) > 1:
-    #             for battler 
-
-
-        
-        # if battler == '':
-        #     attackable_targets = []
-        #     for target in self.battlersEnemies:
-        #         distance = abs(target.pos.x - battler.pos.x) + abs(target.pos.y - battler.pos.y)
-        #         if distance <= 1:
-        #             attackable_targets.append(target)
-        #     return attackable_targets
-
+        return '턴종료'
     def execute(self):
         self.battler_init()
         # print(self.char_data)

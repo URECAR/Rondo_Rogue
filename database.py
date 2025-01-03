@@ -9,12 +9,12 @@ class MAP1:
     spawns = {
         'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
         'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
-        'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
+        # 'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
         'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
         'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
         'Army_Archer': {'Spawn': [9, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
+        # 'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
+        # 'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
     }
 class CharacterDatabase:
     data = {
@@ -53,20 +53,23 @@ class CharacterDatabase:
             },
             'Class': 'Melee',
             'equips' : [
-                '절망','안아줘요 날다람쥐','러시안룰렛', '도윤이의 풍선자동차'
+                # '절망','안아줘요 날다람쥐','러시안룰렛', '도윤이의 풍선자동차'
                         ],
             # 'Range' : 6,
             'inventory': ['HP_Potion', 'MP_Potion', 'Shield_Potion','Battle_Potion'],
             'skills': {
-                '아이스' : 1,
-                '테스트스킬1' : 1,
-                '테스트스킬2' : 1,
+                '불굴의 의지' : 1,
+                '무념의 기보' : 1,
+                '체력 단련' : 3,
+                # '아이스' : 1,
+                # '테스트스킬1' : 1,
+                # '테스트스킬2' : 1,
                 '테스트스킬3' : 1,
-                '테스트스킬5' : 1,
-                '상시 근접 방어' : 1,
-                '저돌맹진' : 1,
-                '무념의 기보' : 3,
-                'Z.O.C 무시' : 1,
+                # '테스트스킬5' : 1,
+                # '상시 근접 방어' : 1,
+                # '저돌맹진' : 1,
+                # '무념의 기보' : 3,
+                # 'Z.O.C 무시' : 1,
                 '신중함' : 3,
             },
         },
@@ -108,7 +111,7 @@ class CharacterDatabase:
             'equips' : [],
             'inventory': [],
             'skills': {
-
+                '전장의 찬가' : 1,
             },
         },
         'Player3': {
@@ -193,7 +196,7 @@ class CharacterDatabase:
         'Spirit': {
             'name'  : '솔의 눈',
             'base_stats': {
-                'Max_HP': 7, 'Max_MP': 1, 'STR': 18, 'DEX': 200, 'INT': 20, 'RES': 7,
+                'Max_HP': 7, 'Max_MP': 60, 'STR': 18, 'DEX': 20, 'INT': 80, 'RES': 7,
                 'CHA': 25, 'Max_EXP': 30, 'Mov': 6
             },
             'growth_stats': {
@@ -213,10 +216,12 @@ class CharacterDatabase:
                 'attack_afterdelay': 200,
             },
             'Class': 'Magic',
-            'inventory': [],
+            'inventory': ['MP_Potion'],
             'skills': {
                 '임기응변': 2,
                 '아이스' : 2,
+                '테스트스킬1' : 1,
+                '테스트스킬2' : 1,
             },
             'hidden_stats': ['STR', 'Mov'],
             'Kill_EXP': 30,
@@ -446,6 +451,7 @@ ANIMATION_PROPERTIES = {
         'size': 1,
         'anchor': 'center',
         'track_target' : True,
+        'priority_offset': 64,
     },
     'ICE1': {
         'frame_speed': 10,
@@ -509,6 +515,14 @@ ANIMATION_PROPERTIES = {
         'initial_velocity': -150,   # 초기 수직 속도 (음수는 위로 향함)
         'gravity': 400             # 중력 가속도
     },
+    'CRITICAL_DAMAGE': {
+        'size': 1,
+        'anchor': 'center',
+        'duration': 1.0,            # 전체 애니메이션 시간
+        'horizontal_speed': 50,     # x축 이동 속도
+        'initial_velocity': -150,   # 초기 수직 속도 (음수는 위로 향함)
+        'gravity': 400             # 중력 가속도
+    },
     'ITEM_HEAL': {
         'frame_speed': 20,
         'folder_path': '../graphics/particles/heal/frames',
@@ -561,68 +575,379 @@ ANIMATION_PROPERTIES = {
     },
 }
 SKILL_PROPERTIES = {
+    # 기본 스킬 템플릿
+    'SKILL_TEMPLATE': {
+        # 필수 속성
+        'Type': '',           # Passive / Active
+        'Description': '',    # 스킬 설명
+        'Style' : 'default',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 패시브 스킬 속성
+        'Passive': {
+            'effect_type': '',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
+            'condition': {        # conditional일 경우
+                'target': '',     # self / allies / enemies
+                'stat': '',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
+                'check_type': [], # ['equal', 'more', 'less'] 중 해당되는 것들
+                'threshold': {},  # 검사
+                  
+            },
+            'support': {          # support일 경우
+                'target': '',          # owner(이 배틀러가 효과 받음) / passer(지나가는 배틀러가 효과 받음)
+                'effect_source': '',   # owner(이 배틀러의 스탯 사용) / passer(지나가는 배틀러의 스탯 사용)
+                'effect_type': '',     # buff(이동 동안만 유지) / immediate(즉시 적용)
+                'animation': '',       # 효과 받을 때의 애니메이션 타입
+            },
+            'effects': {
+                'stats': {},     # 영구 스탯 증가
+                'stats_%': {},   # 퍼센트 기반 스탯 증가
+                'status': {},    # 상태이상 부여
+            }
+        },
+
+        # 액티브 스킬 속성
+        'Active': {
+            'target_type': '',   # single / multi / area
+            'shape': '',         # point / diamond / linear / cone
+            'range': {},         # 레벨별 사거리
+            'area': {},         # 레벨별 범위
+            
+            # 시전 관련
+            'mp_cost': {},      # 레벨별 MP 소모량
+            
+            # 애니메이션 관련
+            'cast_animation': '', # 시전 애니메이션
+            'effect_animation': '', # 효과 애니메이션
+            'hit_animation': '',   # 타격 애니메이션
+            'Dmg_timing': 0,     # 데미지 적용 타이밍
+            
+            # 효과 관련
+            'damage': {
+                'base': {},      # 레벨별 기본 데미지
+                'scaling': {     # 스탯 계수
+                    'STR': 0,
+                    'DEX': 0,
+                    'INT': 0
+                }
+            },
+            'effects': {
+                'stats': {},     # 고정 스탯 변화량
+                'stats_%': {},   # 퍼센트 기반 스탯 변화량
+                'status': {},    # 상태이상 및 확률
+                'duration': 0    # 지속시간 (턴)
+            }
+        }
+    },
+
     # --- 패시브 --- #
     'Z.O.C': {
-        'name': 'Zone of Control',
         'Type': 'Passive',
-        'Description': '''보유 시, 상대의 이동을 일정 확률로 저지한다''',
-        'Status_%': {
-            1: {'여기어디': 20},
-            2: {'여기어디': 20},
-            3: {'여기어디': 20},
-        },
-        'Buff': {
-            1: {'ZOC_Chance': 50},
-            2: {'ZOC_Chance': 70},
-            3: {'ZOC_Chance': 90},
+        'Description': '보유 시, 상대의 이동을 일정 확률로 저지한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'ZOC_Chance': 50},
+                    2: {'ZOC_Chance': 70},
+                    3: {'ZOC_Chance': 90},
+                },
+                'stats_%': {},
+                'status': {},
+            },
         },
     },
     'Z.O.C 무시': {
-        'name': 'Ignore Zone of Control',
         'Type': 'Passive',
-        'Description': '''보유 시, 상대의 저지를 무시할 확률이 생긴다.''',
-
-        'Buff': {
-            1: {'ZOC_Ignore_Chance': 35},
-            2: {'ZOC_Ignore_Chance': 60},
-            3: {'ZOC_Ignore_Chance': 75},
+        'Description': '보유 시, 상대의 저지를 무시할 확률이 생긴다.',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'ZOC_Ignore_Chance': 35},
+                    2: {'ZOC_Ignore_Chance': 60},
+                    3: {'ZOC_Ignore_Chance': 75},
+                },
+                'stats_%': {},
+                'status': {},
+            },
         },
     },
     '상시 근접 방어': {
-        'name': 'Always Melee Defense',
         'Type': 'Passive',
-        'Description' : '''보유 시, 받는 근접 피해량%을 줄인다''',
-        'skill_type' : 'Passive',
-
-        'Buff_%': {
-            1: {'Melee_defense_multiplier' : -40},
-            2: {'Melee_defense_multiplier' : -60},
-            3: {'Melee_defense_multiplier' : -70},
+        'Description': '보유 시, 받는 근접 피해량%을 줄인다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'Melee_defense_multiplier': -40},
+                    2: {'Melee_defense_multiplier': -60},
+                    3: {'Melee_defense_multiplier': -70},
+                },
+                'status': {},
+            },
         },
     },
     '임기응변': {
-        'name': 'Improvisation',
         'Type': 'Passive',
-        'Description': '''보유 시, 반격율이 상승한다''',
-        'Buff': {
-            1: {'Counter_Chance': 5},
-            2: {'Counter_Chance': 10},
-            3: {'Counter_Chance': 15},
+        'Description': '보유 시, 반격율이 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'Counter_Chance': 5},
+                    2: {'Counter_Chance': 10},
+                    3: {'Counter_Chance': 15},
+                },
+                'stats_%': {},
+                'status': {},
+            },
         },
     },
     '저돌맹진': {
-        'name': 'Reckless Charge',
         'Type': 'Passive',
-        'Description': '''보유 시 STR%이 상승하지만, RES%가 하락한다''',
-        'Buff_%': {
-            1: {'STR': 10,'RES' : -10},
-            2: {'STR': 15,'RES' : -15},
-            3: {'STR': 20,'RES' : -20},
+        'Description': '보유 시 STR%이 상승하지만, RES%가 하락한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'STR': 10, 'RES': -10},
+                    2: {'STR': 15, 'RES': -15},
+                    3: {'STR': 20, 'RES': -20},
+                },
+                'status': {},
+            },
         },
     },
-    '보좌': {
-        'name': 'Support',
+    '강력': {
         'Type': 'Passive',
+        'Description': '보유 시 STR% 가 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'STR': 20},
+                    2: {'STR': 40},
+                    3: {'STR': 60},
+                },
+                'status': {},
+            },
+        },
+    },
+    '견고': {
+        'Type': 'Passive',
+        'Description': '보유 시 RES% 가 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'RES': 20},
+                    2: {'RES': 40},
+                    3: {'RES': 60},
+                },
+                'status': {},
+            },
+        },
+    },
+    '신중함': {
+        'Type': 'Passive',
+        'Description': '보유 시 명중률이 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'Accuracy_rate': 10},
+                    2: {'Accuracy_rate': 20},
+                    3: {'Accuracy_rate': 30},
+                },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    '축지의 비기': {
+        'Type': 'Passive',
+        'Description': '보유 시 이동력이 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'Mov': 1},
+                    2: {'Mov': 2},
+                    3: {'Mov': 3},
+                },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    '체력 단련': {
+        'Type': 'Passive',
+        'Description': '보유 시 최대 HP%가 상승한다.',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'Max_HP': 10},
+                    2: {'Max_HP': 20},
+                    3: {'Max_HP': 30},
+                },
+                'status': {},
+            },
+        },
+    },
+    '마력 운용': {
+        'Type': 'Passive',
+        'Description': '보유 시 최대 MP%가 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'Max_MP': 15},
+                    2: {'Max_MP': 30},
+                    3: {'Max_MP': 50},
+                },
+                'status': {},
+            },
+        },
+    },
+    '인과응보': {
+        'Type': 'Passive',
+        'Description': '보유 시 반격 데미지가 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'Counter_attack_multiplier': 15},
+                    2: {'Counter_attack_multiplier': 30},
+                    3: {'Counter_attack_multiplier': 45},
+                },
+                'status': {},
+            },
+        },
+    },
+    '라이온 하트': {
+        'Type': 'Passive',
+        'Description': '보유 시 CHA 상승률이 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'CHA_increase_multiplier': 15},
+                    2: {'CHA_increase_multiplier': 30},
+                    3: {'CHA_increase_multiplier': 45},
+                },
+                'status': {},
+            },
+        },
+    },
+    '회피기동': {
+        'Type': 'Passive',
+        'Description': '보유 시 회피율이 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'Melee_evasion_rate': 15},
+                    2: {'Melee_evasion_rate': 30},
+                    3: {'Melee_evasion_rate': 45},
+                    },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    '야전 의료': {
+        'Type': 'Passive',
+        'Description': '보유 시 HP %를 지속적으로 회복한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'HP_Regen%': 3},
+                    2: {'HP_Regen%': 6},
+                    3: {'HP_Regen%': 9},
+                },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    '마력 반환': {
+        'Type': 'Passive',
+        'Description': '보유 시 MP %를 지속적으로 회복한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'MP_Regen%': 3},
+                    2: {'MP_Regen%': 6},
+                    3: {'MP_Regen%': 9},
+                },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    '아마데우스': {
+        'Type': 'Passive',
+        'Description': '보유 시 경험치 획득량 %이 증가한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {},
+                'stats_%': {
+                    1: {'EXP_multiplier': 10},
+                    2: {'EXP_multiplier': 20},
+                    3: {'EXP_multiplier': 3000},
+                },
+                'status': {},
+            },
+        },
+    },
+    '다시 불타는 혼': {
+        'Type': 'Passive',
+        'Description': '보유 시 레벨업 시 HP,MP %를 추가로 회복한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'Level_Up_Regen': 10},
+                    2: {'Level_Up_Regen': 20},
+                    3: {'Level_Up_Regen': 30},
+                    },
+                'stats_%': {},
+                'status': {},
+            },
+        },
+    },
+    # --- 패시브 - 응원형 --- #
+    '보좌': {   # 지나는 순간 HP 회복과 애니메이션.
+        'Type': 'Passive_Support',
         'Support_type' : 'Recovery',
         'Description' : '''보유 시, 자신을 지나는 아군의 HP를 회복시킨다''',
         'Support': {
@@ -631,20 +956,18 @@ SKILL_PROPERTIES = {
             3: {'Cur_HP': 15},
         },
     },
-    '전장의 함성': {
-        'name': 'Battle Cry',
-        'Type': 'Passive',
+    '전장의 함성': {    # 지나는 순간 그 이동 동안만 STR 증가 버프
+        'Type': 'Passive_Support',
         'Support_type' : 'Boost',
-        'Description' : '''보유 시 자신을 지나는 아군의 ATK를 해당 이동 페이즈에만 자신의 STR의 일정 수치만큼 증가시킨다''',
+        'Description' : '''보유 시 자신을 지나는 아군의 STR을 해당 이동 페이즈에만 자신의 STR의 일정 수치만큼 증가시킨다''',
         'Support_%': {
             1: {'STR': 5},
             2: {'STR': 10},
             3: {'STR': 15},
         },
     },
-    '전장의 질주': {
-        'name': 'Battle Rush',
-        'Type': 'Passive',
+    '전장의 질주': {    # 지나는 순간 그 이동 동안만 크리티컬율 증가 버프
+        'Type': 'Passive_Support',
         'Support_type' : 'Boost_self',
         'Description' : '''보유 시, 자신을 지나는 아군의 크리티컬율을 해당 이동 페이즈에만 증가시킨다''',
         'Support': {
@@ -653,9 +976,8 @@ SKILL_PROPERTIES = {
             3: {'Critical_Chance': 15},
         },
     },
-    '전장의 찬가': {
-        'name': 'Battle Hymn',
-        'Type': 'Passive',
+    '전장의 찬가': {    # 
+        'Type': 'Passive_Support',
         'Support_type' : 'Boost_self',
         'Description' : '''보유 시 자신을 지나는 아군의 주는 근접데미지를 해당 이동 페이즈에만 증가시킨다''',
         'Support_%': {
@@ -664,170 +986,66 @@ SKILL_PROPERTIES = {
             3: {'Melee_attack_multiplier': 15},
         },
     },
-    '강력': {
-        'name': 'Powerful',
-        'Type': 'Passive',
-        'Description' : '''보유 시 STR% 가 증가한다''',
-        'Buff_%': {
-            1: {'STR': 20},
-            2: {'STR': 40},
-            3: {'STR': 60},
-        }
-    },
-    '견고': {
-        'name': 'Solid',
-        'Type': 'Passive',
-        'Description' : '''보유 시 RES% 가 증가한다''',
-        'Buff_%': {
-            1: {'RES': 20},
-            2: {'RES': 40},
-            3: {'RES': 60},
-        }
-    },
-    '신중함': {
-        'name': 'Caution',
-        'Type': 'Passive',
-        'Description': '''보유 시 명중률이 상승한다''',
-        'Buff': {
-            1: {'Accuracy_rate': 10},
-            2: {'Accuracy_rate': 20},
-            3: {'Accuracy_rate': 30},
-        },
-    },
-    '축지의 비기': {
-        'name': 'Secret of Shrinking Earth',
-        'Type': 'Passive',
-        'Description': '''보유 시 명중률이 상승한다''',
-        'Buff': {
-            1: {'Mov': 1},
-            2: {'Mov': 2},
-            3: {'Mov': 3},
-        },
-    },
-    '체력 단련': {
-        'name': 'Physical Training',
-        'Type': 'Passive',
-        'Description': '''보유 시 최대 HP가 상승한다.''',
-        'Buff_%': {
-            1: {'Max_HP': 10},  # 10% 증가
-            2: {'Max_HP': 20},  # 20% 증가
-            3: {'Max_HP': 30},  # 30% 증가
-        }
-    },
-    '마력 운용': {
-        'name': 'Mana Management',
-        'Type': 'Passive',
-        'Description': '''보유 시 최대 MP가 상승한다''',
-        'Buff_%': {
-            1: {'Max_MP': 15},  # 15% 증가
-            2: {'Max_MP': 30},  # 30% 증가
-            3: {'Max_MP': 50},  # 50% 증가
-        }
-    },
-    '인과응보': {
-        'name': 'Retribution',
-        'Type': 'Passive',
-        'Description': '''보유 시 반격 데미지가 상승한다''',
-        'Buff_%': {
-            1: {'Counter_attack_multiplier': 15}, 
-            2: {'Counter_attack_multiplier': 30}, 
-            3: {'Counter_attack_multiplier': 45},  
-        }
-    },
-    '라이온 하트': {
-        'name': 'Lion Heart',
-        'Type': 'Passive',
-        'Description': '''보유 시 CHA 상승률이 증가한다''',
-        'Buff_%': {
-            1: {'CHA_increase_multiplier': 15}, 
-            2: {'CHA_increase_multiplier': 30}, 
-            3: {'CHA_increase_multiplier': 45},  
-        }
-    },
-    '회피기': {
-        'name': 'Evasion',
-        'Type': 'Passive',
-        'Description': '''보유 시 회피율이 증가한다''',
-        'Buff_%': {
-            1: {'Melee_evasion_rate': 15}, 
-            2: {'Melee_evasion_rate': 30}, 
-            3: {'Melee_evasion_rate': 45},  
-        }
-    },
-    '야전 의료': {
-        'name': 'Field Medicine',
-        'Type': 'Passive',
-        'Description': '''보유 시 HP %를 지속적으로 회복한다''',
-        'Buff': {
-            1: {'HP_Regen%': 3}, 
-            2: {'HP_Regen%': 6}, 
-            3: {'HP_Regen%': 9},  
-        }
-    },
-    '마력 반환': {
-        'name': 'Mana Return',
-        'Type': 'Passive',
-        'Description': '''보유 시 MP %를 지속적으로 회복한다''',
-        'Buff': {
-            1: {'MP_Regen%': 3}, 
-            2: {'MP_Regen%': 6}, 
-            3: {'MP_Regen%': 9},  
-        }
-    },
-    '아마데우스': {
-        'name': 'Amadeus',
-        'Type': 'Passive',
-        'Description': '''보유 시 경험치 획득량 %이 증가한다''',
-        'Buff_%': {
-            1: {'EXP_multiplier': 10}, 
-            2: {'EXP_multiplier': 20}, 
-            3: {'EXP_multiplier': 3000},  
-        }
-    },
-    '다시 불타는 혼': {
-        'name': 'Burning Soul Again',
-        'Type': 'Passive_Conditional',
-        'Description': '''보유 시 레벨업 시 HP,MP %를 추가로 회복한다''',
-        'Buff_%': {
-            1: {'Level_Up_Regen': 10}, 
-            2: {'Level_Up_Regen': 20}, 
-            3: {'Level_Up_Regen': 30},  
-        }
-    },
+    # --- 패시브 - 조건부 --- #
     '무념의 기보': {
-        'Type': 'Passive_Conditional',
-        'Description': '''보유 시 {Turn_Without_Magic} 턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.''',
-        'Judge_Type': ['equal', 'more'],
-        'Condition': {
-            1: {'Turn_Without_Magic': 4},
-            2: {'Turn_Without_Magic': 3},
-            3: {'Turn_Without_Magic': 2}
-        },
-        'Buff': {
-            1: {'Mov': 1},
-            2: {'Mov': 1},
-            3: {'Mov': 1}
+        # 필수 속성
+        'Type': 'Passive',           # Passive / Active
+        'Description': '보유 시 일정 턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.',    # 스킬 설명
+        'Style' : 'purple',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 패시브 스킬 속성
+        'Passive': {
+            'effect_type': 'conditional',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
+            'condition': {        # conditional일 경우
+                'target': 'self',     # self / allies / enemies
+                'stat': 'Turn_Without_Magic',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
+                'check_type': ['Equal','More'], # ['equal', 'more', 'less'] 중 해당되는 것들
+                'threshold': {                  # 검사
+                    1: 4,
+                    2: 3,
+                    3: 2,
+                    },   
+            },
+            'effects': {
+                'stats': {       # 영구 스탯 증가
+                    1 : {'Mov' : 1},
+                    2 : {'Mov' : 1},
+                    3 : {'Mov' : 1},
+                    },     
+            }
         },
     },
     '불굴의 의지': {
-        'name': 'Indomitable Will',
-        'Type': 'Passive',
-        'Description': '''보유 시 HP가 {Condition}% 이하이면 STR이 증가한다. ''',
-        'Condition': {
-            'type' : ['equal','more'],
-            1: {'Max_HP': 50}, 
-            2: {'Max_HP': 50}, 
-            3: {'Max_HP': 50}, 
+        'Type': 'Passive',           # Passive / Active
+        'Description': '보유 시 HP가 {threshold의Max_HP}% 이하이면 STR%이 증가한다.',    # 스킬 설명
+        'Style' : 'red',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 패시브 스킬 속성
+        'Passive': {
+            'effect_type': 'conditional',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
+            'condition': {        # conditional일 경우
+                'target': 'self',     # self / allies / enemies
+                'stat': 'HP_ratio',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
+                'check_type': ['Equal','Less'], # ['equal', 'more', 'less'] 중 해당되는 것들
+                'threshold': {
+                    1: 50,
+                    2: 50,
+                    3: 50,
+                    },  # 검사
+                  
+            },
+            'effects': {
+                'stats': {},     # 영구 스탯 증가
+                'stats_%': {
+                    1 : {'STR' : 10},
+                    2 : {'STR' : 15},
+                    3 : {'STR' : 20},
+                    },   # 퍼센트 기반 스탯 증가
+                'status': {},    # 상태이상 부여
+            }
         },
-        'Buff': {
-            1: {'STR': 10}, 
-            2: {'STR': 15}, 
-            3: {'STR': 20}, 
-        }
     },
+
     # --- 버프 --- #
     '테스트스킬3': {
-        'name': 'Test Skill 3',
         'Type': 'Active',
         'style': 'default',
         'Description' : '''사용 시, 다음 자신 페이즈까지 RES%를 올린다''',
@@ -844,7 +1062,6 @@ SKILL_PROPERTIES = {
         },
     },
     '근접 방어 태세': {
-        'name': 'Melee Defense Stance',
         'Type': 'Active',
         'style': 'default',
         'Description' : '''사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다''',
@@ -860,11 +1077,10 @@ SKILL_PROPERTIES = {
             3: {'Melee_defense_multiplier' : -70},
         },
     },
-    # --- 액티브 --- #
+    # --- 액티브 - 매직 스킬 --- #
     '아이스': {
-        'name': 'Ice',
         'Type': 'Active',
-        'style': 'magic',
+        'Style': 'magic',
         'Description' : '''{Range}칸 내 한 명에게 얼음 공격을 가한다''',
         'skill_type': 'Targeting',
         'target' : ['Enemy','Ally'],
@@ -890,19 +1106,18 @@ SKILL_PROPERTIES = {
             3 : 7,
         },
         'Status_%' : {
-            1: {'동결' : 100,'약화' : 100},    # 데미지 입을 시 10% 확률로 동결 상태이상
-            2: {'동결' : 100,'약화' : 100},    
-            3: {'동결' : 100, '약화' : 10},    
+            1: {'동결' : 100,},    # 데미지 입을 시 10% 확률로 동결 상태이상
+            2: {'동결' : 15,},    
+            3: {'동결' : 20, '약화' : 5},    
         }
     },
     '테스트스킬1': {
-        'name': 'Test Skill 1',
         'Type': 'Active',
-        'style': 'magic',
+        'Style': 'magic',
         'Description' : '''전방 {Range}칸 내의 모두에게 얼음 공격을 가한다''',
         'skill_type': 'Targeting_all',
-        'shape' : 'linear',
         'target' : ['Self_Enemy','Self_Ally'],
+        'shape' : 'linear',
         'animate_type' : 'all_tiles',
         'animate'   : 'ICE1',
         'casting': 'MAGIC_CIRCLE',
@@ -929,16 +1144,15 @@ SKILL_PROPERTIES = {
         },
     },
     '테스트스킬2': {
-        'name': 'Test Skill 2',
         'Type': 'Active',
-        'style': 'magic',
+        'Style': 'magic',
         'Description' : '''{Range}칸 내 자신을 제외한 모두에게 번개를 소환한다''',
         'skill_type': 'Targeting_all',
-        'shape' : 'diamond',
         'target' : ['Self_Enemy','Self_Ally_except_Self'],
-        'casting': 'MAGIC_CIRCLE',
+        'shape' : 'diamond',
         'animate_type' : 'default',
         'animate'   : 'THUNDER1',
+        'casting': 'MAGIC_CIRCLE',
         'Dmg_timing' : 400,
         'Dmg_Coff': {
             1: 40,
@@ -962,9 +1176,8 @@ SKILL_PROPERTIES = {
         },
     },
     '테스트스킬5': {
-        'name': 'Test Skill 5',
         'Type': 'Active',
-        'style': 'magic',
+        'Style': 'magic',
         'Description': '''전방 {Range}칸 내의 모두에게 불 공격을 한다.''',
         'skill_type': 'Targeting_all',
         'shape': 'linear',
@@ -995,11 +1208,10 @@ SKILL_PROPERTIES = {
             3: {'약화': 30},
         },
     },
-    # --- 특수스킬 --- #
+    # --- 액티브 - 서포트 스킬 --- #
     '군의학': {
-        'name': 'Military Medicine',
         'Type': 'Active',
-        'style': 'yellow',
+        'Style': 'support',
         'Description': '''의술을 사용하여 아군 한 명의 체력을 크게 회복시킨다.''',
         'skill_type': 'Targeting',  # 단일 타겟팅
         'shape' : 'diamond',
@@ -1047,7 +1259,7 @@ STATUS_PROPERTIES = {
     '동결': {
         'Description': '몸이 얼어붙어 움직일 수 없다.',
         'Notification': '동결됨',
-        'duration': 1,  # 지속 턴 수
+        'duration': 2,  # 지속 턴 수
         'Stat_%': {},  # 스탯 변화 없음
         'Stat': {},
         'Effects': [
@@ -1087,7 +1299,7 @@ ITEM_PROPERTIES = {
         }
     },
     'Battle_Potion': {
-        'name': '전투력 포션',
+        'name': '전투 포션',
         'Description': '''해당 전투 동안 카리스마가 20 상승한다''',
         'Type': 'Permanent',
         'animate': 'AURA',

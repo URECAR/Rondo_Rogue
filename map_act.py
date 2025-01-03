@@ -50,11 +50,12 @@ class MapAction:
         self.movable_tiles = []
         self.highlight_tiles = []
         self.current_skill_index = 0  # 선택된 스킬 인덱스 추가
-        self.current_Class = ''
+        self.Acted = []
         self.battle_exp_gain = 0
         self.current_dialog = None
         self.path_dragging = False
         self.last_drag_pos = None
+        self.temp_facing = ''
         self.elapsed_turn = 0
         # 초기 BGM 재생
 
@@ -182,15 +183,20 @@ class MapAction:
             )
             self.effect_manager.add_effect(battler, effect)
         
+       # 영구 Change 효과가 있다면
+        if 'Change' in effect_data:
+            effect = Effect(
+                effect_type='change',
+                effects=effect_data['Change'],
+                source=f"change_{item_name}",
+                remaining_turns=None  # 영구 지속
+            )
+            self.effect_manager.add_effect(battler, effect)
+        
         # 인벤토리에서 아이템 제거
         self.selected_battler.inventory.remove(item_name)
         
-        # if 'animate' in item_data:
-        #     self.animation_manager.create_animation(
-        #         battler,
-        #         item_data['animate'],
-        #         wait=True
-        #     )
+
         
         return True
 
@@ -256,8 +262,8 @@ class MapAction:
                 next_y = current_y + dy
                 next_pos_tuple = (next_x, next_y)
 
-                if (0 <= next_x < len(moves_data[0]) and 
-                    0 <= next_y < len(moves_data)):
+                if (0 <= next_x < len(moves_data) and 
+                    0 <= next_y < len(moves_data[0])):
                     
                     if moves_data[int(next_x)][int(next_y)] == '-1' or next_pos_tuple in exclude_positions:
                         continue
@@ -430,7 +436,7 @@ class MapAction:
             level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
             skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
             damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
-            
+
             # 데미지 처리
             self.Damage(self.selected_battler, target, damage, "Magic")
             
@@ -456,43 +462,6 @@ class MapAction:
                             target.effects.append(effect_percent)
                         target.effects.append(effect)
                 self.effect_manager.update_effects(target)
-
-    def apply_combat_effects(self, attacker, target, hit_location='front'):
-        """전투 관련 효과 적용"""
-        # 히트 위치에 따른 데미지 보정
-        location_multipliers = {
-            'front': 1.0,
-            'side': 1.1,
-            'rear': 1.25
-        }
-        location_multiplier = location_multipliers.get(hit_location, 1.0)
-        
-        # 임시 전투 버프 추가
-        combat_buff = {
-            'percent': {
-                'damage_multiplier': (location_multiplier - 1) * 100  # 퍼센트로 변환
-            }
-        }
-        self.effect_manager.apply_temporary_buff(attacker, 'combat_location', combat_buff, duration=1)
-        
-        # 취약성 증가 (후방 공격 등에 의한)
-        vulnerability = {
-            'front': {'evasion': 0, 'counter': 0, 'critical': 0, 'zoc': 0},
-            'side': {'evasion': 5, 'counter': 5, 'critical': 4, 'zoc': 5},
-            'rear': {'evasion': 15, 'counter': 15, 'critical': 10, 'zoc': 15}
-        }
-        vuln = vulnerability.get(hit_location, {'evasion': 0, 'counter': 0, 'critical': 0, 'zoc': 0})
-        
-        # 취약성 디버프 적용
-        vulnerability_debuff = {
-            'percent': {
-                'Melee_evasion_chance': -vuln['evasion'],
-                'Counter_Chance': -vuln['counter'],
-                'Critical_defense': -vuln['critical'],
-                'ZOC_Chance': -vuln['zoc']
-            }
-        }
-        self.effect_manager.apply_temporary_buff(target, 'combat_vulnerability', vulnerability_debuff, duration=1)
 
     def apply_support_skill_effects(self, source_battler, target_battler, skill_name, skill_level):
         """지원 스킬 효과 적용 (예: 전장의 함성)"""
@@ -664,17 +633,18 @@ class MapAction:
             self.selected_battler.priority = self.selected_battler.pos.y * TILESIZE
 
             # 턴 행동에 따른 activate_condition 초기화
-            if not all(battler.inactive for battler in self.level.battler_sprites 
-                    if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
-                if self.current_Class == 'Magic':
+            if not all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
+                if 'Magic' in self.Acted:
                     self.selected_battler.activate_condition['Turn_Without_Magic'] = 0
-                elif self.current_Class == 'Range':
+                if 'Skill' in self.Acted:
+                    self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
+                if 'Range' in self.Acted:
                     self.selected_battler.activate_condition['Turn_Without_Range'] = 0
-                elif self.current_Class == 'Melee':
+                if 'Melee' in self.Acted:
                     self.selected_battler.activate_condition['Turn_Without_Melee'] = 0
-
-                if self.move_roots:
+                if 'Move' in self.Acted:
                     self.selected_battler.activate_condition['Turn_Without_Move'] = 0
+
                 # if self.skill:
                 #     self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
 
@@ -688,34 +658,61 @@ class MapAction:
             self.level.cursor.move_lock = False
             self.change_state('explore')
         
-        self.current_Class = ''    
+        self.Acted = []   
 
-    def Damage(self, attacker, target, damage, damage_type):
+    def Damage(self, attacker, target, damage, damage_type, is_critical=False):
         """데미지 처리 및 관련 효과 적용"""
-        # 애니메이션 생성
-        self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.top - 10),'DAMAGE',value=-damage)
+        # 현재 사용 중인 스킬의 스타일 확인
+        is_healing = False
+        if damage_type == "Magic" and hasattr(self, 'skill'):
+            skill_info = SKILL_PROPERTIES[self.skill]
+            is_healing = skill_info.get('style') == 'support'
+        
+        if not is_healing:
+            # 데미지의 경우 음수가 되지 않도록 (회복 방지)
+            damage = max(0, damage)
+
+        # 애니메이션 생성 (회복은 양수로, 데미지는 음수로 표시)
+        display_value = -damage
+        
+        if is_critical:
+            self.animation_manager.create_animation(
+                (target.collision_rect.centerx, target.collision_rect.top - 10),
+                'CRITICAL_DAMAGE',
+                value=display_value
+            )
+        else:
+            self.animation_manager.create_animation(
+                (target.collision_rect.centerx, target.collision_rect.top - 10),
+                'DAMAGE',
+                value=display_value
+            )
 
         # 경험치 계산을 위한 데이터
         kill_exp = CharacterDatabase.data[target.char_type].get('Kill_EXP', 0)
         max_hp = target.stats["Max_HP"]
         cha_multiplier = attacker.stats["CHA_increase_multiplier"]
-        dmg_ratio = damage / max_hp
-
-        # 데미지 적용 및 경험치 획득
-        if damage > target.Cur_HP:
-            target.Cur_HP = 0
-            attacker.tmp_exp_gain += kill_exp * (1 + target.Cur_HP / max_hp)
-            
-            # CHA 증가 효과
-            cha_boost = int(5 * cha_multiplier * (1 + dmg_ratio))
-            self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+        dmg_ratio = abs(damage) / max_hp
+        
+        # 데미지/회복 적용
+        if is_healing:
+            target.Cur_HP = min(target.Cur_HP - damage, target.stats["Max_HP"])
+            attacker.tmp_exp_gain += kill_exp * dmg_ratio * 0.5  # 회복은 절반의 경험치
         else:
-            target.Cur_HP -= damage
-            attacker.tmp_exp_gain += kill_exp * dmg_ratio
-            
-            # CHA 증가 효과
-            cha_boost = int(5 * cha_multiplier * dmg_ratio)
-            self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+            if damage > target.Cur_HP:
+                target.Cur_HP = 0
+                attacker.tmp_exp_gain += kill_exp * (1 + target.Cur_HP / max_hp)
+                
+                # CHA 증가 효과
+                cha_boost = int(5 * cha_multiplier * (1 + dmg_ratio))
+                self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+            else:
+                target.Cur_HP -= damage
+                attacker.tmp_exp_gain += kill_exp * dmg_ratio
+                
+                # CHA 증가 효과
+                cha_boost = int(5 * cha_multiplier * dmg_ratio)
+                self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
 
         # 상태이상이나 조건부 효과들 체크
         self.effect_manager.update_effects(target)  # 대상의 효과 업데이트

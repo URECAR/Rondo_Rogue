@@ -64,6 +64,11 @@ BAR_COLOR = '#EEEEEE'
 BAR_COLOR_SELECTED = '#111111'
 DIRECTIONS = ['UP', 'LEFT', 'DOWN', 'RIGHT']
 
+# sound settings
+INITIAL_MASTER_VOLUME = 0.0
+INITIAL_MUSIC_VOLUME = 0.5
+INITIAL_SFX_VOLUME = 0.5
+
 
 SKILL_STYLES = {
    'default': {  # 기본 스타일
@@ -76,7 +81,7 @@ SKILL_STYLES = {
        'text_color': (135, 206, 235),    # 하늘색
        'bg_color': (0, 0, 0, 200)        
    },
-   'yellow': {   # 버프/지원 스킬용
+   'support': {   # 버프/지원 스킬용
        'border_color': (218, 165, 32),   # 골드
        'text_color': (255, 215, 0),      # 노란색
        'bg_color': (0, 0, 0, 200)
