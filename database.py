@@ -1,6 +1,6 @@
 # Database.py
 from properties import *
-
+import random
 class MAP1:
     data = {
         'Max_X' : 35 * TILESIZE,
@@ -9,12 +9,12 @@ class MAP1:
     spawns = {
         'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
         'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
-        # 'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
+        'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
         'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
         'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
         'Army_Archer': {'Spawn': [9, 14], 'Level': 6, 'base_team': 'Enemy'},
-        # 'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
-        # 'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
+        'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
+        'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
     }
 class CharacterDatabase:
     data = {
@@ -111,7 +111,10 @@ class CharacterDatabase:
             'equips' : [],
             'inventory': [],
             'skills': {
+                '전장의 함성' : 1,
+                '전장의 질주' : 1,
                 '전장의 찬가' : 1,
+                '보좌' : 1,
             },
         },
         'Player3': {
@@ -189,7 +192,7 @@ class CharacterDatabase:
                 '아이스': 1,
                 '테스트스킬1': 1,
                 '테스트스킬5': 1,
-                '군의학' : 2,
+                '군의학' : 1,
                 '마력 운용' : 1,
             },
         },
@@ -388,6 +391,71 @@ class CharacterDatabase:
         }
         base_stats.update(combat_stats)  # stats에 combat_stats 통합
         return base_stats
+# Database.py
+class CombatFormulas:
+    @staticmethod
+    def calculate_melee_damage(self,attacker, target, Damage_Bonus_multiplier, is_critical):
+        """근접 공격 데미지 계산 공식"""
+        base_damage = (attacker.stats['STR'] * 2 - target.stats['RES'])
+        multiplier = attacker.stats['Melee_attack_multiplier'] * target.stats['Melee_defense_multiplier'] * Damage_Bonus_multiplier
+        if is_critical:
+            multiplier *= attacker.stats['Critical_attack_multiplier']
+        return max(base_damage * multiplier, 0)
+
+    @staticmethod
+    def calculate_magic_damage(attacker, defender, skill_power):
+        """마법 공격 데미지 계산 공식"""
+        base_damage = attacker.stats['INT'] * skill_power - defender.stats['RES']
+        multiplier = attacker.stats['Magic_attack_multiplier'] * defender.stats['Magic_defense_multiplier']
+        return max(base_damage * multiplier, 0)
+
+    def check_counter(self, attacker, target, vurnerable):
+        total_counter_chance = (target.stats["Counter_Chance"] + (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5 - vurnerable["counter"]) * 0.01
+        self.map_action.Acted.append([target,'Counter_Check',total_counter_chance])
+        if total_counter_chance > random.random():
+            self.map_action.Acted.append([target,'Counter_Check','Executed'])
+            return True
+        else:
+            return False 
+
+    def check_evasion(self, attacker, target, vurnerable):
+        total_hit_chance = (1 + ((attacker.stats["DEX"] - target.stats["DEX"]) * 2 + attacker.stats["Accuracy_rate"] - target.stats["Melee_evasion_chance"] + vurnerable["evasion"]) * 0.01)
+        self.map_action.Acted.append([target,'Hit_Check',total_hit_chance])
+        if total_hit_chance < random.random():
+            self.map_action.Acted.append([target,'Hit_Check','Evaded'])
+            return True 
+        else:
+            return False
+
+    def check_critical(self, attacker, target, vurnerable):
+        total_crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.5 + vurnerable['critical']) * 0.01
+        self.map_action.Acted.append([target,'Critical_Check',total_crit_chance])
+        if random.random() < total_crit_chance:
+            self.map_action.Acted.append([target,'Critical_Check','Executed'])
+            return True
+        else:
+            return False
+    
+    def check_ZOC(self, attacker, target, vurnerable):
+        total_zoc_check = (target.stats["ZOC_Chance"] - attacker.stats["ZOC_Ignore_Chance"] - vurnerable['zoc']) * 0.01
+        self.map_action.Acted.append([target,'ZOC_Check',total_zoc_check])    
+        if target.Cur_HP > 0 and random.random() < total_zoc_check:
+            self.map_action.Acted.append([target,'ZOC_Check','Executed'])
+            return True
+        else:
+            return False
+    def calculate_directional_bonus(attacker, target):
+        opposite_directions = {"left": "right", "right": "left", "up": "down", "down": "up"}
+        hit_location = 'rear' if target.facing == attacker.facing else 'side' if target.facing != opposite_directions.get(attacker.facing) else 'front'
+        hit_stats = {
+                    'front': {'multiplier': 1.0, 'vurnerable': {'zoc': 5, 'evasion': 0, 'counter': 0, 'critical': 0}},
+                    'side': {'multiplier': 1.1, 'vurnerable': {'zoc': 10, 'evasion': 5, 'counter': 5, 'critical': 4}},
+                    'rear': {'multiplier': 1.25, 'vurnerable': {'zoc': 15, 'evasion': 15, 'counter': 15, 'critical': 8}}
+                }
+        bonuses = hit_stats[hit_location]
+        Damage_Bonus_multiplier = bonuses['multiplier']
+        vurnerable = bonuses['vurnerable']
+        return Damage_Bonus_multiplier, vurnerable
 ANIMATION_PROPERTIES = {
     'SLASH': {
         'frame_speed': 20,
@@ -405,7 +473,7 @@ ANIMATION_PROPERTIES = {
     },
     'HEAL': {
         'frame_speed': 20,
-        'folder_path': '../graphics/particles/heal/frames',
+        'folder_path': '../graphics/particles/heal',
         'size': 1,
         'anchor': 'center',
     },
@@ -445,12 +513,19 @@ ANIMATION_PROPERTIES = {
         'offset' : [0,-20],
         'sound': 'SHIELD'
     },
+    'SHIELD2': {
+        'frame_speed': 10,
+        'folder_path': '../graphics/particles/shield2',
+        'size': 4,
+        'anchor': 'center',
+        'sound': 'SHIELD',
+        'priority_offset': 64,
+    },
     'AURA': {
         'frame_speed': 15,
         'folder_path': '../graphics/particles/aura',
         'size': 1,
         'anchor': 'center',
-        'track_target' : True,
         'priority_offset': 64,
     },
     'ICE1': {
@@ -459,6 +534,14 @@ ANIMATION_PROPERTIES = {
         'size': 1,
         'anchor': 'bottom',
         'offset': [0, -48],
+        'sound': 'ICE_MAGIC1'
+    },
+    'ICE2': {
+        'frame_speed': 10,
+        'folder_path': '../graphics/particles/icicle',
+        'size': 3,
+        'anchor': 'bottom',
+        'offset': [0, -16],
         'sound': 'ICE_MAGIC1'
     },
     'FIRE1': {
@@ -525,13 +608,13 @@ ANIMATION_PROPERTIES = {
     },
     'ITEM_HEAL': {
         'frame_speed': 20,
-        'folder_path': '../graphics/particles/heal/frames',
+        'folder_path': '../graphics/particles/heal',
         'size': 1,
         'anchor': 'center',
     },
     'POTION': {
         'frame_speed': 20,
-        'folder_path': '../graphics/particles/heal/frames',
+        'folder_path': '../graphics/particles/heal',
         'size': 1,
         'anchor': 'center',
         'sound': 'POTION',
@@ -598,12 +681,12 @@ SKILL_PROPERTIES = {
                 'animation': '',       # 효과 받을 때의 애니메이션 타입
             },
             'effects': {
-                'stats': {},     # 영구 스탯 증가
+                'stats': {},     # 스탯 증가
                 'stats_%': {},   # 퍼센트 기반 스탯 증가
                 'status': {},    # 상태이상 부여
             }
         },
-
+    
         # 액티브 스킬 속성
         'Active': {
             'target_type': '',   # single / multi / area
@@ -637,7 +720,6 @@ SKILL_PROPERTIES = {
             }
         }
     },
-
     # --- 패시브 --- #
     'Z.O.C': {
         'Type': 'Passive',
@@ -946,51 +1028,103 @@ SKILL_PROPERTIES = {
         },
     },
     # --- 패시브 - 응원형 --- #
-    '보좌': {   # 지나는 순간 HP 회복과 애니메이션.
-        'Type': 'Passive_Support',
-        'Support_type' : 'Recovery',
-        'Description' : '''보유 시, 자신을 지나는 아군의 HP를 회복시킨다''',
-        'Support': {
-            1: {'Cur_HP': 5},
-            2: {'Cur_HP': 10},
-            3: {'Cur_HP': 15},
+    '보좌': {   
+        'Type': 'Passive',           
+        'Description': '보유 시, 지나가는 아군의 HP를 회복시켜준다.',  
+        'Style' : 'default',    
+        'Passive': {
+            'effect_type': 'support',   
+            'support': {         
+                'target': 'passer',         
+                'effect_source': 'owner',  
+                'effect_type': 'immediate',    
+                'animation': 'HEAL',   
+            },    
+            'effects': {
+                'stats': {
+                    1 : {'Cur_HP' : 10},
+                    2 : {'Cur_HP' : 20},
+                    3 : {'Cur_HP' : 30},
+                    },     
+                'stats_%': {},   
+                'status': {},   
+            },
         },
-    },
-    '전장의 함성': {    # 지나는 순간 그 이동 동안만 STR 증가 버프
-        'Type': 'Passive_Support',
-        'Support_type' : 'Boost',
-        'Description' : '''보유 시 자신을 지나는 아군의 STR을 해당 이동 페이즈에만 자신의 STR의 일정 수치만큼 증가시킨다''',
-        'Support_%': {
-            1: {'STR': 5},
-            2: {'STR': 10},
-            3: {'STR': 15},
+    },    
+    '전장의 함성': {    
+        'Type': 'Passive',          
+        'Description': '''보유 시 자신을 지나는 아군의 STR을 해당 이동 페이즈에만 자신의 STR의 일정 수치만큼 증가시킨다''',    
+        'Style' : 'default',   
+        'Passive': {
+            'effect_type': 'support',    
+            'support': {         
+                'target': 'passer',          
+                'effect_source': 'owner', 
+                'effect_type': 'buff',    
+                'animation': 'AURA',      
+            },
+            'effects': {
+                'stats': {},    
+                'stats_%': {   
+                    1: {'STR' : 5},
+                    2: {'STR' : 10},
+                    3: {'STR' : 15},
+                        },    
+                'status': {},   
+            },
         },
     },
     '전장의 질주': {    # 지나는 순간 그 이동 동안만 크리티컬율 증가 버프
-        'Type': 'Passive_Support',
-        'Support_type' : 'Boost_self',
-        'Description' : '''보유 시, 자신을 지나는 아군의 크리티컬율을 해당 이동 페이즈에만 증가시킨다''',
-        'Support': {
-            1: {'Critical_Chance': 5},
-            2: {'Critical_Chance': 10},
-            3: {'Critical_Chance': 15},
+        'Type': 'Passive',          
+        'Description': '''보유 시, 자신을 지나는 아군의 크리티컬율을 해당 이동 페이즈에만 증가시킨다''',    
+        'Style' : 'default',   
+        'Passive': {
+            'effect_type': 'support',    
+            'support': {         
+                'target': 'passer',          
+                'effect_source': 'owner', 
+                'effect_type': 'buff',    
+                'animation': 'AURA',      
+            },
+            'effects': {
+                'stats': {    
+                    1: {'Critical_Chance' : 5},
+                    2: {'Critical_Chance' : 10},
+                    3: {'Critical_Chance' : 15},
+                        },    
+                'stats_%': {},  
+                'status': {},   
+            },
         },
     },
     '전장의 찬가': {    # 
-        'Type': 'Passive_Support',
-        'Support_type' : 'Boost_self',
-        'Description' : '''보유 시 자신을 지나는 아군의 주는 근접데미지를 해당 이동 페이즈에만 증가시킨다''',
-        'Support_%': {
-            1: {'Melee_attack_multiplier': 5},
-            2: {'Melee_attack_multiplier': 10},
-            3: {'Melee_attack_multiplier': 15},
+        'Type': 'Passive',          
+        'Description': '''보유 시 자신을 지나는 아군의 주는 근접데미지를 해당 이동 페이즈에만 증가시킨다''',    
+        'Style' : 'default',   
+        'Passive': {
+            'effect_type': 'support',    
+            'support': {         
+                'target': 'passer',          
+                'effect_source': 'owner', 
+                'effect_type': 'buff',    
+                'animation': 'AURA',      
+            },
+            'effects': {
+                'stats': {    
+                    1: {'Melee_attack_multiplier' : 0.05},
+                    2: {'Melee_attack_multiplier' : 0.1},
+                    3: {'Melee_attack_multiplier' : 0.15},
+                        },    
+                'stats_%': {},  
+                'status': {},   
+            },
         },
     },
     # --- 패시브 - 조건부 --- #
     '무념의 기보': {
         # 필수 속성
         'Type': 'Passive',           # Passive / Active
-        'Description': '보유 시 일정 턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.',    # 스킬 설명
+        'Description': '보유 시 {threshold}턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.',    # 스킬 설명
         'Style' : 'purple',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
         # 패시브 스킬 속성
         'Passive': {
@@ -1016,7 +1150,7 @@ SKILL_PROPERTIES = {
     },
     '불굴의 의지': {
         'Type': 'Passive',           # Passive / Active
-        'Description': '보유 시 HP가 {threshold의Max_HP}% 이하이면 STR%이 증가한다.',    # 스킬 설명
+        'Description': '보유 시 HP가 {threshold}% 이하이면 STR%이 증가한다.',    # 스킬 설명
         'Style' : 'red',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
         # 패시브 스킬 속성
         'Passive': {
@@ -1043,7 +1177,6 @@ SKILL_PROPERTIES = {
             }
         },
     },
-
     # --- 버프 --- #
     '테스트스킬3': {
         'Type': 'Active',
@@ -1081,15 +1214,15 @@ SKILL_PROPERTIES = {
     '아이스': {
         'Type': 'Active',
         'Style': 'magic',
-        'Description' : '''{Range}칸 내 한 명에게 얼음 공격을 가한다''',
+        'Description' : '{Range}칸 내 한 명에게 얼음 공격을 가한다',
         'skill_type': 'Targeting',
         'target' : ['Enemy','Ally'],
         'shape' : 'diamond',
         'target' : 'Self_Enemy',
         'animate_type' : 'default',
-        'animate'   : 'ICE1',
+        'animate'   : 'ICE2',
         'casting': 'MAGIC_CIRCLE',
-        'Dmg_timing' : 1000,
+        'Dmg_timing' : 400,
         'Dmg_Coff': {
             1: 35,
             2: 45,
@@ -1119,9 +1252,9 @@ SKILL_PROPERTIES = {
         'target' : ['Self_Enemy','Self_Ally'],
         'shape' : 'linear',
         'animate_type' : 'all_tiles',
-        'animate'   : 'ICE1',
+        'animate'   : 'ICE2',
         'casting': 'MAGIC_CIRCLE',
-        'Dmg_timing' : 1000,
+        'Dmg_timing' : 400,
         'Dmg_Coff': {
             1: 35,
             2: 45,
@@ -1219,10 +1352,10 @@ SKILL_PROPERTIES = {
         'casting': 'MAGIC_CIRCLE',
         'animate': 'HEAL',
         'Dmg_timing': 500,
-        'Value': {  # 회복량
-            1: {'Cur_HP': 25},
-            2: {'Cur_HP': 40},
-            3: {'Cur_HP': 60}
+        'Heal': {  # 회복량
+            1: 25,
+            2: 40,
+            3: 60,
         },
         'Mana': {  # 마나 소모량
             1: 20,
@@ -1275,6 +1408,7 @@ ITEM_PROPERTIES = {
         'Description': '''체력을 최대 체력의 30% 회복시킨다''',
         'Type': 'Active',
         'animate': 'AURA',
+        'icon_path': '../graphics/icons/items/potion1.png',
         'Effect': {
             'Heal_%': {'Cur_HP': 30}  # 퍼센트 기반 회복
         }
@@ -1284,6 +1418,7 @@ ITEM_PROPERTIES = {
         'Description': '''MP를 50 회복시킨다''',
         'Type': 'Active',
         'animate': 'AURA',
+        'icon_path': '../graphics/icons/items/potion2.png',
         'Effect': {
             'Heal': {'Cur_MP': 50}  # 고정값 회복
         }
@@ -1293,16 +1428,18 @@ ITEM_PROPERTIES = {
         'Description': '''3턴간 방어력이 10 상승한다''',
         'Type': 'Buff',
         'animate': 'POTION',
+        'icon_path': '../graphics/icons/items/potion3.png',
         'Effect': {
             'Buff': {'RES': 10},
             'duration': 3
         }
     },
     'Battle_Potion': {
-        'name': '전투 포션',
+        'name': '투사의 물약',
         'Description': '''해당 전투 동안 카리스마가 20 상승한다''',
         'Type': 'Permanent',
         'animate': 'AURA',
+        'icon_path': '../graphics/icons/items/potion4.png',
         'Effect': {
             'Change': {'CHA': 20}
         }

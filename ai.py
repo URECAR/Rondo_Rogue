@@ -270,11 +270,11 @@ class AI():
         result = []
         usable_skills = []
         for skill in self.selected_battler.skills:
-            if SKILL_PROPERTIES[skill].get('style') == 'magic' and self.selected_battler.Cur_MP >= SKILL_PROPERTIES[skill]['Mana'][self.selected_battler.skills[skill]]:
+            if SKILL_PROPERTIES[skill].get('Style') == 'magic' and self.selected_battler.Cur_MP >= SKILL_PROPERTIES[skill]['Mana'][self.selected_battler.skills[skill]]:
                 print(f"사용가능한 스킬 {skill},LV.{self.selected_battler.skills[skill]}")
                 usable_skills.append(skill)
         if not usable_skills:
-            if 'MP_Potion' in self.selected_battler.inventory:
+            if 'MP_Potion' in self.selected_battler.inventory and self.selected_battler.Cur_MP < self.selected_battler.stats['Max_MP']:
                 self.map_action.item_to_use = 'MP_Potion'
                 self.map_action.target_battler = self.selected_battler
                 return '아이템사용'
@@ -289,7 +289,7 @@ class AI():
                 double_kill_targets = []
                 other_targets = []
                 for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
-                    if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler):
+                    if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler): #and battler.team != self.selected_battler.team:
                         target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
                         level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
                         skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
@@ -326,7 +326,7 @@ class AI():
                     double_kill_targets = []
                     other_targets = []
                     for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
-                        if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler) and battler.team != self.selected_battler.team:
+                        if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler): #and battler.team != self.selected_battler.team:
                             target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
                             level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
                             skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
@@ -350,8 +350,9 @@ class AI():
             skill_name = skill_info[0]
             # 모든 타겟을 하나의 리스트로 합침 (이제 None 값이 없으므로 안전하게 연결 가능)
             all_targets = skill_info[1] + skill_info[2] + skill_info[3]
+            print(skill_name,[target.team for target in all_targets])
             
-            if len(all_targets) > max_targets:
+            if len([target for target in all_targets if target.team != self.selected_battler.team]) > max_targets:
                 max_targets = len(all_targets)
                 # 방향이 있는 스킬인 경우 분리
                 if '_' in skill_name:

@@ -129,7 +129,7 @@ class Character(pygame.sprite.Sprite):
 
         # 패시브 스킬 효과 적용
         self.init_apply_passive_skills()
-        print(self.effects)
+        print(str(self.name)+"의 초기 effect 목록 " + str(self.effects))
         self.Cur_HP = int(self.stats['Max_HP'])
         self.Cur_MP = int(self.stats['Max_MP'])
 
@@ -237,7 +237,6 @@ class Character(pygame.sprite.Sprite):
     def update_facing_direction(self, target_pos):
         """이동 방향에 따라 facing 방향 업데이트"""
         dx, dy = target_pos
-        
         if abs(dx) > abs(dy):
             self.facing = 'right' if dx > 0 else 'left'
         elif abs(dx) < abs(dy):

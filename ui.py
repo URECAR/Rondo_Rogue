@@ -894,17 +894,24 @@ class UI():
         if all_skills:
             selected_skill, skill_level = all_skills[self.info_skill_index]
             skill_info = SKILL_PROPERTIES[selected_skill]
-            description = skill_info['Description']
-            
-            # 스킬 레벨에 따른 수치 포맷팅
+            description = skill_info['Description'].strip()
             format_dict = {}
+            
+            # Handle both active and passive skills
+            if skill_info.get('Type') == 'Passive' and 'Passive' in skill_info:
+                # Get threshold from passive condition if it exists
+                if 'condition' in skill_info['Passive']:
+                    threshold = skill_info['Passive']['condition'].get('threshold', {}).get(skill_level)
+                    if threshold is not None:
+                        format_dict['threshold'] = threshold
+            
+            # Handle regular skill properties
             for key, value in skill_info.items():
                 if isinstance(value, dict) and skill_level in value:
                     if isinstance(value[skill_level], dict):
                         format_dict.update(value[skill_level])
                     else:
                         format_dict[key] = value[skill_level]
-            
             try:
                 description = description.format(**format_dict)
             except KeyError:
@@ -1387,6 +1394,9 @@ class UI():
         
         item_box_height = 28
         item_box_spacing = 4
+        icon_size = 24  # 아이콘 크기
+        icon_padding = 2  # 아이콘 주변 여백
+        name_padding = 10  # 아이콘과 이름 사이의 간격
         
         # 아이템/장비 보유 상태에 따라 인덱스 조정
         if not battler.inventory and battler.equips:
@@ -1423,7 +1433,7 @@ class UI():
                 bg_color = UPGRADE_BG_COLOR_SELECTED
                 text_color = TEXT_COLOR_SELECTED
             elif is_hovered:
-                bg_color = (80, 80, 80)  # 호버 시 약간 밝은 색
+                bg_color = (80, 80, 80)
                 text_color = TEXT_COLOR
             else:
                 bg_color = UI_BG_COLOR
@@ -1432,8 +1442,25 @@ class UI():
             pygame.draw.rect(self.display_surface, bg_color, item_rect, border_radius=5)
             pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, item_rect, 1, border_radius=5)
             
-            text = normal_font.render(ITEM_PROPERTIES[item]['name'], True, text_color)
-            self.display_surface.blit(text, (item_rect.x + 8, item_rect.y + (item_box_height - text.get_height())//2))
+            # 아이콘 로드 및 표시
+            item_info = ITEM_PROPERTIES[item]
+            if 'icon_path' in item_info:
+                try:
+                    icon = pygame.image.load(item_info['icon_path']).convert_alpha()
+                    icon = pygame.transform.scale(icon, (icon_size, icon_size))
+                    icon_x = item_rect.x + icon_padding
+                    icon_y = item_rect.centery - icon_size // 2
+                    self.display_surface.blit(icon, (icon_x, icon_y))
+                except:
+                    print(f"아이콘 로드 실패: {item_info['icon_path']}")
+                    # 아이콘 로드 실패 시 기본 아이콘이나 빈 공간으로 처리
+                    pass
+            
+            # 아이템 이름은 아이콘 오른쪽에 표시
+            text = normal_font.render(item_info['name'], True, text_color)
+            text_x = item_rect.x + icon_size + name_padding
+            text_y = item_rect.centery - text.get_height() // 2
+            self.display_surface.blit(text, (text_x, text_y))
         
         items_section_height = num_items * (item_box_height + item_box_spacing)
 
@@ -1457,12 +1484,12 @@ class UI():
             is_selected = (i == self.info_equip_index and self.in_equip_section)
             is_hovered = i == getattr(self, 'hovered_equip', None)
             
-            # 배경색 결정 (선택됨 > 호버 > 기본)
+            # 배경색 결정
             if is_selected:
                 bg_color = UPGRADE_BG_COLOR_SELECTED
                 text_color = TEXT_COLOR_SELECTED
             elif is_hovered:
-                bg_color = (80, 80, 80)  # 호버 시 약간 밝은 색
+                bg_color = (80, 80, 80)
                 text_color = TEXT_COLOR
             else:
                 bg_color = UI_BG_COLOR
@@ -1471,12 +1498,39 @@ class UI():
             pygame.draw.rect(self.display_surface, bg_color, equip_rect, border_radius=5)
             pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, equip_rect, 1, border_radius=5)
             
+            # 장비 아이콘 로드 및 표시
+            equip_info = EQUIP_PROPERTIES[equip]
+            if 'icon_path' in equip_info:
+                try:
+                    icon = pygame.image.load(equip_info['icon_path']).convert_alpha()
+                    icon = pygame.transform.scale(icon, (icon_size, icon_size))
+                    icon_x = equip_rect.x + icon_padding
+                    icon_y = equip_rect.centery - icon_size // 2
+                    self.display_surface.blit(icon, (icon_x, icon_y))
+                except:
+                    print(f"아이콘 로드 실패: {equip_info['icon_path']}")
+                    # 아이콘 로드 실패 시 기본 아이콘이나 빈 공간으로 처리
+                    pass
+            
+            # 장비 이름은 아이콘 오른쪽에 표시
             text = normal_font.render(equip, True, text_color)
-            self.display_surface.blit(text, (equip_rect.x + 8, equip_rect.y + (item_box_height - text.get_height())//2))
+            text_x = equip_rect.x + icon_size + name_padding
+            text_y = equip_rect.centery - text.get_height() // 2
+            self.display_surface.blit(text, (text_x, text_y))
         
-        # 설명란 (나머지 코드는 동일)
-        description_rect = pygame.Rect(description_x,rect.y + padding_y,description_width,rect.height - padding_y * 2)
-        pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), description_rect, border_radius=5)
+        # 설명란
+        description_rect = pygame.Rect(
+            description_x,
+            rect.y + padding_y,
+            description_width,
+            rect.height - padding_y * 2
+        )
+        pygame.draw.rect(
+            self.display_surface, 
+            (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), 
+            description_rect, 
+            border_radius=5
+        )
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
         
         # 선택된 아이템/장비의 설명 표시
@@ -1491,7 +1545,7 @@ class UI():
         description_lines = self.wrap_text(description, normal_font, description_rect.width - 20)
         for i, line in enumerate(description_lines[:10]):
             text_surf = normal_font.render(line, True, TEXT_COLOR)
-            self.display_surface.blit(text_surf, (description_rect.x + 10, description_rect.y + 10 + i * 25))    
+            self.display_surface.blit(text_surf, (description_rect.x + 10, description_rect.y + 10 + i * 25))
 
     def display(self):
 

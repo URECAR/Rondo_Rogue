@@ -404,35 +404,22 @@ class MapAction:
             buff_duration = skill_info.get('duration', 1)
             # 퍼센트 효과 적용
             if 'Buff_%' in skill_info:
-                effect = Effect(
-                    effect_type='buff',
-                    effects=skill_info['Buff_%'][skill_level],
-                    source=f"buff_{skill_name}",
-                    remaining_turns=buff_duration,
-                    is_percent=True
-                )
+                effect = Effect(effect_type='buff',effects=skill_info['Buff_%'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration,is_percent=True)
                 self.effect_manager.add_effect(target, effect)
-                
             # 고정값 효과 적용
             if 'Buff' in skill_info:
-                effect = Effect(
-                    effect_type='buff',
-                    effects=skill_info['Buff'][skill_level],
-                    source=f"buff_{skill_name}",
-                    remaining_turns=buff_duration
-                )
+                effect = Effect(effect_type='buff',effects=skill_info['Buff'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration)
                 self.effect_manager.add_effect(target, effect)
-                
             # 버프 시각 효과
-            self.animation_manager.create_animation(
-                (target.collision_rect.centerx, target.collision_rect.centery),
-                skill_info.get('animate', 'SHIELD'),
-                wait=True
-            )
+            self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),skill_info.get('animate', 'SHIELD'),wait=True)
             
+        elif skill_info.get('Heal'):
+            heal_amount = skill_info['Heal'][skill_level]+ self.selected_battler.stats["INT"]
+            target.Cur_HP = min(target.stats["Max_HP"], target.Cur_HP + heal_amount )
+            self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.top - 10),'DAMAGE',value=heal_amount)
         # 데미지 스킬인 경우
         else:
-            target_magic_def = target.stats["INT"] * 1.2 + target.stats["RES"] * 0.4
+            target_magic_def = target.stats["INT"] * 0.2 + target.stats["RES"] * 0.4
             level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
             skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
             damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
@@ -608,8 +595,6 @@ class MapAction:
                         
         return tiles
 
-
-# map_act.py의 endturn 메서드에서 관련 부분 제거
     def endturn(self):
         """턴 종료 시 처리"""
         self.target_battler = None
@@ -621,6 +606,11 @@ class MapAction:
             self.selected_battler.isfollowing_root = False
             self.selected_battler.selected = False
             self.selected_battler.priority = self.selected_battler.pos.y * TILESIZE
+            # print("@@삭제전 + "+str(self.selected_battler.stats))
+            for effect in self.selected_battler.effects:
+                if effect.type == 'supportbuff':
+                    self.effect_manager.remove_effect(self.selected_battler, effect_type=effect.type)
+            # print("@@삭제후 + "+str(self.selected_battler.stats))
             # 턴 행동에 따른 activate_condition 초기화
             if not all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
                 # Check each action type using proper format

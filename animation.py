@@ -5,7 +5,7 @@ from database import ANIMATION_PROPERTIES, SOUND_PROPERTIES
 from properties import *
 from support import SoundManager
 class Animation(pygame.sprite.Sprite):
-    def __init__(self, start_pos, animation_type, value=None):
+    def __init__(self, start_pos, animation_type, value=None,track_target=False):
         super().__init__()
         self.sprite_type = 'animation'
         self.animation_type = animation_type
@@ -16,7 +16,7 @@ class Animation(pygame.sprite.Sprite):
         self.last_update_time = pygame.time.get_ticks()
         self.sound_manager = SoundManager()
         # 추적 대상 저장
-        self.track_target = self.props.get('track_target', False)
+        self.track_target = track_target
         self.target = start_pos if isinstance(start_pos, pygame.sprite.Sprite) else None
         self.initial_offset = None  # 초기 위치와의 오프셋 저장
         if 'sound' in self.props:
@@ -589,9 +589,9 @@ class AnimationManager:
         self.active_animations = [anim for anim in self.active_animations if anim.alive()]
         return len(self.active_animations) > 0
 
-    def create_animation(self, pos, animation_type, wait=False, value=None):
+    def create_animation(self, pos, animation_type, wait=False, value=None, track_target=False):
         """애니메이션 생성"""
-        animation = Animation(pos, animation_type, value)
+        animation = Animation(pos, animation_type, value,track_target=track_target)
         self.visible_sprites.add(animation)
 
         if wait:
