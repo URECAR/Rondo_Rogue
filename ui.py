@@ -3,6 +3,7 @@ import pygame
 from properties import *
 from database import *
 from support import InputManager, SoundManager
+import math
 class UI():
     def __init__(self,level):
         self.level = level
@@ -361,17 +362,25 @@ class UI():
             self.display_surface.blit(text, text_rect)
     # 스킬 창
     def show_skill_menu(self, selected_skill_index):
+        """스킬 선택 메뉴 표시"""
         if self.current_main_menu != self.previous_main_menu:
             return
+
         selected_battler = self.level.map_action.selected_battler
         active_skills = [skill for skill in selected_battler.skills 
                         if SKILL_PROPERTIES[skill]['Type'] == 'Active']
-        # 메뉴 크기 계산 - 여유 공간 추가
+        
+        if not active_skills:
+            return
+
+        # 기본 메뉴 크기 계산
         skill_menu_width = MENU_PANEL_WIDTH * 2.5
         description_height = MENU_PANEL_HEIGHT * 1.5  # 설명란 높이
-        skills_start_y = MENU_PANEL_HEIGHT * 2  # 스킬 목록 시작 위치
-        skill_menu_height = skills_start_y + (MENU_PANEL_HEIGHT + 10) * len(active_skills)  # 간격 추가
+        skills_start_y = MENU_PANEL_HEIGHT * 2 # 스킬 목록 시작 위치
+        visible_skills = 4  # 한 번에 보여줄 스킬 수
+        skill_menu_height = skills_start_y + (MENU_PANEL_HEIGHT + 16) * visible_skills
 
+        # 메뉴 위치 계산
         screen_width = self.display_surface.get_width()
         battler_screen_x = selected_battler.rect.centerx - self.visible_sprites.offset.x
         is_on_left = battler_screen_x < screen_width / 2
@@ -388,174 +397,205 @@ class UI():
         pygame.draw.rect(self.display_surface, UI_BG_COLOR, menu_rect)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, menu_rect, 2)
 
-        if active_skills:
-            selected_skill = active_skills[selected_skill_index]
-            skill_info = SKILL_PROPERTIES[selected_skill]
-            skill_level = selected_battler.skills[selected_skill]
-            
-            # 설명 텍스트 포맷팅
-            description = skill_info['Description'].strip()
-            format_dict = {}
-            
-            for key, value in skill_info.items():
-                if isinstance(value, dict) and skill_level in value:
-                    if isinstance(value[skill_level], dict):
-                        format_dict.update(value[skill_level])
-                    else:
-                        format_dict[key] = value[skill_level]
-            
-            try:
-                description = description.format(**format_dict)
-            except KeyError:
-                pass
+        # 스크롤 위치 계산
+        max_skills = len(active_skills)
+        scroll_offset = max(0, min(selected_skill_index - (visible_skills - 2), max_skills - visible_skills))
+        visible_skills_list = active_skills[scroll_offset:scroll_offset + visible_skills]
 
-            # 설명 텍스트 영역
-            description_rect = pygame.Rect(
-                base_x + 10,
-                base_y + 10,
-                skill_menu_width - 20,
-                description_height
-            )
-            pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), 
-                            description_rect, border_radius=5)
-            pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
+        # 화살표 애니메이션
+        current_time = pygame.time.get_ticks()
+        arrow_offset = abs(math.sin(current_time / 300)) * 5
+        arrow_size = 12
+        arrow_color = UI_BORDER_COLOR
 
-            # 설명 텍스트 줄바꿈 및 표시
-            description_lines = self.wrap_text(description, self.font, skill_menu_width - 40)
-            
-            if len(description_lines) > 2:
-                # 스킬 변경 시 스크롤 초기화
-                current_time = pygame.time.get_ticks()
-                if self.current_skill_menu_index != getattr(self, 'last_skill_index', None):
-                    self.description_scroll_time = current_time
-                    self.last_skill_index = self.current_skill_menu_index
-                
-                # 스크롤 위치 계산
-                if current_time - self.description_scroll_time > self.description_scroll_pause:
-                    scroll_offset = ((current_time - self.description_scroll_time - self.description_scroll_pause) 
-                                // self.description_scroll_speed % (len(description_lines) * 20))
+        selected_skill = active_skills[selected_skill_index]
+        skill_info = SKILL_PROPERTIES[selected_skill]
+        skill_level = selected_battler.skills[selected_skill]
+
+        # 설명 텍스트 포맷팅
+        description = skill_info['Description'].strip()
+        format_dict = {}
+        
+        for key, value in skill_info.items():
+            if isinstance(value, dict) and skill_level in value:
+                if isinstance(value[skill_level], dict):
+                    format_dict.update(value[skill_level])
                 else:
-                    scroll_offset = 0
+                    format_dict[key] = value[skill_level]
+        
+        try:
+            description = description.format(**format_dict)
+        except KeyError:
+            pass
 
-                # 보이는 줄 계산
-                visible_lines = []
-                total_height = 0
-                for line in description_lines:
-                    line_height = self.font.get_size()[1]
-                    if total_height - scroll_offset < 40:  # 최대 2줄까지
-                        visible_lines.append(line)
-                    total_height += line_height
+        # 설명 텍스트 영역
+        description_rect = pygame.Rect(
+            base_x + 10,
+            base_y + 10,
+            skill_menu_width - 20,
+            description_height
+        )
+        pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), 
+                        description_rect, border_radius=5)
+        pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
 
-                # 보이는 줄 표시
-                for i, line in enumerate(visible_lines):
-                    line_surface = self.font.render(line, True, TEXT_COLOR)
-                    line_rect = line_surface.get_rect(
-                        topleft=(base_x + 20, base_y + 20 + i * 20)
-                    )
-                    self.display_surface.blit(line_surface, line_rect)
+        # 설명 텍스트 줄바꿈 및 표시
+        description_lines = self.wrap_text(description, self.font, skill_menu_width - 40)
+        if len(description_lines) > 2:
+            # 스킬 변경 시 스크롤 초기화
+            current_time = pygame.time.get_ticks()
+            if self.current_skill_menu_index != getattr(self, 'last_skill_index', None):
+                self.description_scroll_time = current_time
+                self.last_skill_index = self.current_skill_menu_index
+            
+            # 스크롤 위치 계산
+            if current_time - self.description_scroll_time > self.description_scroll_pause:
+                scroll_offset = ((current_time - self.description_scroll_time - self.description_scroll_pause) 
+                            // self.description_scroll_speed % (len(description_lines) * 20))
             else:
-                # 2줄 이하면 그냥 표시
-                for i, line in enumerate(description_lines):
-                    line_surface = self.font.render(line, True, TEXT_COLOR)
-                    line_rect = line_surface.get_rect(
-                        topleft=(base_x + 20, base_y + 20 + i * 20)
-                    )
-                    self.display_surface.blit(line_surface, line_rect)
+                scroll_offset = 0
 
-            # 구분선 추가
-            separator_y = base_y + skills_start_y - 10
-            pygame.draw.line(
-                self.display_surface,
-                UI_BORDER_COLOR,
-                (base_x + 20, separator_y),
-                (base_x + skill_menu_width - 20, separator_y),
-                2
-            )
-            
-            # 장식용 구분점 추가
-            dot_radius = 3
-            dot_x = base_x + skill_menu_width // 2
-            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x, separator_y), dot_radius)
-            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x - 15, separator_y), dot_radius-1)
-            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x + 15, separator_y), dot_radius-1)
+            # 보이는 줄 계산
+            visible_lines = []
+            total_height = 0
+            for line in description_lines:
+                line_height = self.font.get_size()[1]
+                if total_height - scroll_offset < 40:  # 최대 2줄까지
+                    visible_lines.append(line)
+                total_height += line_height
 
-            mouse_pos = pygame.mouse.get_pos()
-
-           # 스킬 목록 표시
-            for i, skill in enumerate(active_skills):
-                skill_info = SKILL_PROPERTIES[skill]
-                skill_level = selected_battler.skills[skill]
-                
-                # 마나 체크
-                mana_cost = skill_info.get('Mana', {}).get(skill_level, 0)
-                has_enough_mana = selected_battler.Cur_MP >= mana_cost
-                
-                # 스킬 항목 배경
-                item_rect = pygame.Rect(
-                    base_x + 10,
-                    base_y + skills_start_y + i * (MENU_PANEL_HEIGHT + 10),
-                    skill_menu_width - 20,
-                    MENU_PANEL_HEIGHT
+            # 보이는 줄 표시
+            for i, line in enumerate(visible_lines):
+                line_surface = self.font.render(line, True, TEXT_COLOR)
+                line_rect = line_surface.get_rect(
+                    topleft=(base_x + 20, base_y + 20 + i * 20)
                 )
+                self.display_surface.blit(line_surface, line_rect)
+        else:
+            # 2줄 이하면 그냥 표시
+            for i, line in enumerate(description_lines):
+                line_surface = self.font.render(line, True, TEXT_COLOR)
+                line_rect = line_surface.get_rect(
+                    topleft=(base_x + 20, base_y + 20 + i * 20)
+                )
+                self.display_surface.blit(line_surface, line_rect)
 
-                # 스타일 적용 부분 수정
-                style_name = skill_info.get('Style', 'default')
-                
-                style = SKILL_STYLES[style_name]
-                
-                
-                
-                is_selected = (i == selected_skill_index)
-                is_hovered = item_rect.collidepoint(mouse_pos)
-                
-                # 배경색 결정 (선택됨 > 호버 > 기본)
-                if is_selected:
-                    bg_color = UPGRADE_BG_COLOR_SELECTED
-                    border_color = style['border_color']
-                    text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
-                elif is_hovered:
-                    bg_color = (80, 80, 80)
-                    border_color = style['border_color']
-                    text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
-                else:
-                    bg_color = (UI_BG_COLOR[0]-10, UI_BG_COLOR[1]-10, UI_BG_COLOR[2]-10)
-                    border_color = style['border_color']
-                    text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
+        # 구분선과 장식 추가
+        separator_y = base_y + skills_start_y - 10
+        pygame.draw.line(
+            self.display_surface,
+            UI_BORDER_COLOR,
+            (base_x + 20, separator_y),
+            (base_x + skill_menu_width - 20, separator_y),
+            2
+        )
+        
+        # 장식용 구분점 추가
+        dot_radius = 3
+        dot_x = base_x + skill_menu_width // 2
+        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x, separator_y), dot_radius)
+        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x - 15, separator_y), dot_radius-1)
+        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x + 15, separator_y), dot_radius-1)
 
-                # 배경 그리기
-                pygame.draw.rect(self.display_surface, bg_color, item_rect, border_radius=5)
-                pygame.draw.rect(self.display_surface, border_color, item_rect, 1, border_radius=5)
+        # 스크롤 화살표 표시
+        if scroll_offset > 0:  # 위쪽 화살표
+            arrow_y = base_y + skills_start_y - 5  # 위쪽 화살표 위치
+            points_up = [
+                (menu_rect.centerx - arrow_size // 2, arrow_y + arrow_size - arrow_offset),
+                (menu_rect.centerx + arrow_size // 2, arrow_y + arrow_size - arrow_offset),
+                (menu_rect.centerx, arrow_y - arrow_offset)
+            ]
+            pygame.draw.polygon(self.display_surface, arrow_color, points_up)
 
-                # 스킬 이름과 마나 비용을 별도의 Surface에 렌더링
-                text_surface = pygame.Surface((skill_menu_width - 20, MENU_PANEL_HEIGHT), pygame.SRCALPHA)
+        if scroll_offset + visible_skills < max_skills:  # 아래쪽 화살표
+            arrow_y = menu_rect.bottom - 20  # 아래쪽 화살표 위치
+            points_down = [
+                (menu_rect.centerx - arrow_size // 2, arrow_y + arrow_offset),
+                (menu_rect.centerx + arrow_size // 2, arrow_y + arrow_offset),
+                (menu_rect.centerx, arrow_y + arrow_size + arrow_offset)
+            ]
+            pygame.draw.polygon(self.display_surface, arrow_color, points_down)
 
-                # 스킬 이름 렌더링
-                name_text = self.font.render(skill, True, text_color)
-                name_rect = name_text.get_rect(midleft=(10, MENU_PANEL_HEIGHT // 2))
-                text_surface.blit(name_text, name_rect)
+        mouse_pos = pygame.mouse.get_pos()
 
-                # 마나 비용 표시
-                if 'Mana' in skill_info:
-                    mana_cost = f"MP {mana_cost}"
-                    mana_text = self.font.render(mana_cost, True, text_color)
-                    mana_rect = mana_text.get_rect(midright=(skill_menu_width - 30, MENU_PANEL_HEIGHT // 2))
-                    text_surface.blit(mana_text, mana_rect)
+        # 스킬 목록 표시
+        for i, skill in enumerate(visible_skills_list):
+            skill_info = SKILL_PROPERTIES[skill]
+            skill_level = selected_battler.skills[skill]
+            
+            # 마나 체크
+            mana_cost = skill_info.get('Mana', {}).get(skill_level, 0)
+            has_enough_mana = selected_battler.Cur_MP >= mana_cost
+            
+            # 스킬 항목 배경
+            item_rect = pygame.Rect(
+                base_x + 10,
+                base_y + skills_start_y + 10 + i * (MENU_PANEL_HEIGHT + 10),
+                skill_menu_width - 20,
+                MENU_PANEL_HEIGHT
+            )
 
-                # text_surface를 메인 화면에 blit
-                self.display_surface.blit(text_surface, item_rect)
+            # 스타일 적용
+            style_name = skill_info.get('Style', 'default')
+            style = SKILL_STYLES[style_name]
+            
+            is_selected = (i + scroll_offset == selected_skill_index)
+            is_hovered = item_rect.collidepoint(mouse_pos)
+            
+            # 배경색 결정
+            if is_selected:
+                bg_color = UPGRADE_BG_COLOR_SELECTED
+                border_color = style['border_color']
+                text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
+            elif is_hovered:
+                bg_color = (80, 80, 80)
+                border_color = style['border_color']
+                text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
+            else:
+                bg_color = (UI_BG_COLOR[0]-10, UI_BG_COLOR[1]-10, UI_BG_COLOR[2]-10)
+                border_color = style['border_color']
+                text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
+
+            # 배경 그리기
+            pygame.draw.rect(self.display_surface, bg_color, item_rect, border_radius=5)
+            pygame.draw.rect(self.display_surface, border_color, item_rect, 1, border_radius=5)
+
+            # 스킬 이름과 마나 비용을 별도의 Surface에 렌더링
+            text_surface = pygame.Surface((skill_menu_width - 20, MENU_PANEL_HEIGHT), pygame.SRCALPHA)
+
+            # 스킬 이름 렌더링
+            name_text = self.font.render(skill, True, text_color)
+            name_rect = name_text.get_rect(midleft=(10, MENU_PANEL_HEIGHT // 2))
+            text_surface.blit(name_text, name_rect)
+
+            # 마나 비용 표시
+            if 'Mana' in skill_info:
+                mana_cost = f"MP {mana_cost}"
+                mana_text = self.font.render(mana_cost, True, text_color)
+                mana_rect = mana_text.get_rect(midright=(skill_menu_width - 30, MENU_PANEL_HEIGHT // 2))
+                text_surface.blit(mana_text, mana_rect)
+
+            # text_surface를 메인 화면에 blit
+            self.display_surface.blit(text_surface, item_rect)
 
     def show_item_menu(self, selected_item_index):
+        """스킬 / 아이템 / 기타 메뉴 중에서 '아이템' 메뉴를 열었을 때의 표시 로직"""
+        # 만약 메인메뉴(current_main_menu)가 갓 바뀐 상황이 아니라면, 표시하지 않음
         if self.current_main_menu != self.previous_main_menu:
             return
-        selected_battler = self.level.map_action.selected_battler
         
-        # 메뉴 크기 계산 (show_item_menu)
+        selected_battler = self.level.map_action.selected_battler
+        if not selected_battler:
+            return
+        
+        # 메뉴 크기 계산
         item_menu_width = MENU_PANEL_WIDTH * 2.5
         description_height = MENU_PANEL_HEIGHT * 1.5  # 설명란 높이
         items_start_y = MENU_PANEL_HEIGHT * 2  # 아이템 목록 시작 위치
         items_display_count = min(4, len(selected_battler.inventory))
         item_menu_height = items_start_y + (MENU_PANEL_HEIGHT + 10) * items_display_count
 
+        # 배틀러가 화면의 왼쪽/오른쪽 어느 쪽에 있는지 판단해서 메뉴 위치 결정
         screen_width = self.display_surface.get_width()
         battler_screen_x = selected_battler.rect.centerx - self.visible_sprites.offset.x
         is_on_left = battler_screen_x < screen_width / 2
@@ -567,33 +607,40 @@ class UI():
 
         base_y = selected_battler.rect.centery - self.visible_sprites.offset.y - item_menu_height // 2
 
-        # 메인 패널
+        # 메인 패널(배경 사각형) 그리기
         menu_rect = pygame.Rect(base_x, base_y, item_menu_width, item_menu_height)
         pygame.draw.rect(self.display_surface, UI_BG_COLOR, menu_rect)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, menu_rect, 2)
 
+        # 아이템이 존재할 경우에만 설명 영역 및 구분선 등을 그려줌
         if selected_battler.inventory:
+            # 현재 선택된 아이템
             selected_item = selected_battler.inventory[selected_item_index]
             item_info = ITEM_PROPERTIES[selected_item]
-            
-            # 설명 영역
+
+            # ───── 설명란 ─────
             description_rect = pygame.Rect(
                 base_x + 10,
                 base_y + 10,
                 item_menu_width - 20,
                 description_height
             )
-            pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), description_rect, border_radius=5)
+            pygame.draw.rect(
+                self.display_surface, 
+                (UI_BG_COLOR[0] - 20, UI_BG_COLOR[1] - 20, UI_BG_COLOR[2] - 20), 
+                description_rect, 
+                border_radius=5
+            )
             pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
 
             # 설명 텍스트 표시 (최대 2줄)
             description_lines = self.wrap_text(item_info['Description'], self.font, item_menu_width - 40)
-            for i, line in enumerate(description_lines[:2]):  # 최대 2줄까지만 표시
+            for i, line in enumerate(description_lines[:2]):
                 line_surface = self.font.render(line, True, TEXT_COLOR)
                 line_rect = line_surface.get_rect(topleft=(base_x + 20, base_y + 20 + i * 20))
                 self.display_surface.blit(line_surface, line_rect)
 
-            # 구분선
+            # ───── 구분선 및 장식점 ─────
             separator_y = base_y + items_start_y - 10
             pygame.draw.line(
                 self.display_surface,
@@ -602,30 +649,38 @@ class UI():
                 (base_x + item_menu_width - 20, separator_y),
                 2
             )
-            
+
             # 장식용 구분점
             dot_radius = 3
             dot_x = base_x + item_menu_width // 2
             pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x, separator_y), dot_radius)
-            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x - 15, separator_y), dot_radius-1)
-            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x + 15, separator_y), dot_radius-1)
+            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x - 15, separator_y), dot_radius - 1)
+            pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x + 15, separator_y), dot_radius - 1)
 
+            # ───── 아이템 목록 표시 ─────
             mouse_pos = pygame.mouse.get_pos()
+            
+            # 아이콘 관련 설정
+            icon_size = 24       # 아이콘 가로/세로 크기
+            icon_padding = 5     # item_rect 안에서 아이콘을 띄울 여백
+            name_padding = 10    # 아이콘과 글자 사이 간격
 
-            # 아이템 목록
             for i, item in enumerate(selected_battler.inventory[:items_display_count]):
                 item_info = ITEM_PROPERTIES[item]
-                
+
+                # 각 아이템 메뉴 패널의 위치/크기
                 item_rect = pygame.Rect(
                     base_x + 10,
                     base_y + items_start_y + i * (MENU_PANEL_HEIGHT + 10),
                     item_menu_width - 20,
                     MENU_PANEL_HEIGHT
                 )
+
+                # 선택 여부 / 마우스 호버 여부
                 is_selected = (i == selected_item_index)
                 is_hovered = item_rect.collidepoint(mouse_pos)
-                
-                # 배경색 결정 (선택됨 > 호버 > 기본)
+
+                # 배경/테두리/글자 색상 결정
                 if is_selected:
                     bg_color = UPGRADE_BG_COLOR_SELECTED
                     border_color = UI_BORDER_COLOR_ACTIVE
@@ -635,17 +690,32 @@ class UI():
                     border_color = UI_BORDER_COLOR
                     text_color = TEXT_COLOR
                 else:
-                    bg_color = (UI_BG_COLOR[0]-10, UI_BG_COLOR[1]-10, UI_BG_COLOR[2]-10)
+                    bg_color = (UI_BG_COLOR[0] - 10, UI_BG_COLOR[1] - 10, UI_BG_COLOR[2] - 10)
                     border_color = UI_BORDER_COLOR
                     text_color = TEXT_COLOR
 
+                # 배경 그리기
                 pygame.draw.rect(self.display_surface, bg_color, item_rect, border_radius=5)
                 pygame.draw.rect(self.display_surface, border_color, item_rect, 1, border_radius=5)
 
-                # 아이템 이름 표시
+                # ── [아이콘 표시] ──
+                icon_x = item_rect.x + icon_padding
+                icon_y = item_rect.centery - icon_size // 2
+                if 'icon_path' in item_info:
+                    try:
+                        icon_surf = pygame.image.load(item_info['icon_path']).convert_alpha()
+                        icon_surf = pygame.transform.scale(icon_surf, (icon_size, icon_size))
+                        self.display_surface.blit(icon_surf, (icon_x, icon_y))
+                    except:
+                        print(f"아이콘 로드 실패: {item_info['icon_path']}")
+                        # 로드 실패 시, 대체 처리를 원한다면 여기에 작성(기본 아이콘 등)
+
+                # ── [아이템 이름 표시] ──
                 name_text = self.font.render(item_info['name'], True, text_color)
-                name_rect = name_text.get_rect(midleft=(item_rect.left + 10, item_rect.centery))
-                self.display_surface.blit(name_text, name_rect)    # 정보 창
+                name_rect = name_text.get_rect(
+                    midleft=(icon_x + icon_size + name_padding, item_rect.centery)
+                )
+                self.display_surface.blit(name_text, name_rect)
 
     def show_info_menu(self):
         """정보 UI 표시"""
@@ -848,11 +918,42 @@ class UI():
         skill_spacing = 10
         skills_start_y = rect.y + padding_y
         
-        # 스킬 리스트 표시
+        # 전체 스킬 리스트와 표시 가능한 스킬 수 계산
         all_skills = list(battler.skills.items())
-        visible_skills = 8
+        visible_skills = 8  # 한 번에 보여줄 스킬 수
+        max_skills = len(all_skills)
         
-        for i, (skill_name, skill_level) in enumerate(all_skills[:visible_skills]):
+        # 스크롤 위치 계산 (info_skill_index를 기준으로)
+        scroll_offset = max(0, min(self.info_skill_index - (visible_skills - 2), max_skills - visible_skills))
+        visible_skills_list = all_skills[scroll_offset:scroll_offset + visible_skills]
+        
+        # 화살표 애니메이션을 위한 타이밍 계산
+        current_time = pygame.time.get_ticks()
+        arrow_offset = abs(math.sin(current_time / 300)) * 5  # 부드러운 상하 움직임
+        
+        # 스크롤 화살표 표시
+        arrow_size = 20
+        arrow_color = UI_BORDER_COLOR
+        if scroll_offset > 0:  # 위쪽 화살표
+            arrow_y = rect.y + padding_y
+            points_up = [
+                (rect.centerx - arrow_size//2, arrow_y + arrow_size - arrow_offset),
+                (rect.centerx + arrow_size//2, arrow_y + arrow_size - arrow_offset),
+                (rect.centerx, arrow_y - arrow_offset)
+            ]
+            pygame.draw.polygon(self.display_surface, arrow_color, points_up)
+        
+        if scroll_offset + visible_skills < max_skills:  # 아래쪽 화살표
+            arrow_y = rect.bottom - padding_y - arrow_size
+            points_down = [
+                (rect.centerx - arrow_size//2, arrow_y + arrow_offset),
+                (rect.centerx + arrow_size//2, arrow_y + arrow_offset),
+                (rect.centerx, arrow_y + arrow_size + arrow_offset)
+            ]
+            pygame.draw.polygon(self.display_surface, arrow_color, points_down)
+
+        # 스킬 리스트 표시
+        for i, (skill_name, skill_level) in enumerate(visible_skills_list):
             skill_rect = pygame.Rect(
                 rect.x + padding_x,
                 skills_start_y + i * (skill_height + skill_spacing),
@@ -860,8 +961,8 @@ class UI():
                 skill_height
             )
             
-            is_selected = i == self.info_skill_index
-            is_hovered = skill_rect.collidepoint(pygame.mouse.get_pos())
+            is_selected = (i + scroll_offset) == self.info_skill_index
+            is_hovered = i + scroll_offset == getattr(self, 'hovered_skill', None)
             
             # 스킬 스타일
             skill_info = SKILL_PROPERTIES[skill_name]
@@ -884,10 +985,24 @@ class UI():
             
             text = self.font.render(skill_name, True, text_color)
             self.display_surface.blit(text, (skill_rect.x + 10, skill_rect.y + (skill_height - text.get_height())//2))
+            
+            # 스킬 레벨 표시
+            level_text = f"Lv.{skill_level}"
+            level_surface = self.font.render(level_text, True, text_color)
+            level_rect = level_surface.get_rect(
+                midright=(skill_rect.right - 10, skill_rect.centery)
+            )
+            self.display_surface.blit(level_surface, level_rect)
         
         # 설명란
-        description_rect = pygame.Rect(description_x, rect.y + padding_y, description_width, rect.height - padding_y * 2)
-        pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), description_rect, border_radius=5)
+        description_rect = pygame.Rect(
+            description_x,
+            rect.y + padding_y,
+            description_width,
+            rect.height - padding_y * 2
+        )
+        pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), 
+                        description_rect, border_radius=5)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
         
         # 선택된 스킬 설명 표시
@@ -899,7 +1014,6 @@ class UI():
             
             # Handle both active and passive skills
             if skill_info.get('Type') == 'Passive' and 'Passive' in skill_info:
-                # Get threshold from passive condition if it exists
                 if 'condition' in skill_info['Passive']:
                     threshold = skill_info['Passive']['condition'].get('threshold', {}).get(skill_level)
                     if threshold is not None:
@@ -917,17 +1031,11 @@ class UI():
             except KeyError:
                 pass
             
-            # 설명 텍스트 표시 (아이템 설명과 동일한 간격 사용)
+            # 설명 텍스트 표시
             description_lines = self.wrap_text(description, self.font, description_width - 20)
             for i, line in enumerate(description_lines[:10]):  # 최대 10줄까지 표시
                 text_surf = self.font.render(line, True, TEXT_COLOR)
                 self.display_surface.blit(text_surf, (description_rect.x + 10, description_rect.y + 10 + i * 25))
-            
-            # 스킬 레벨 표시
-            level_text = f"Lv. {skill_level}"
-            level_surface = self.font.render(level_text, True, TEXT_COLOR)
-            level_rect = level_surface.get_rect(bottomright=(description_rect.right - 10, description_rect.bottom - 10))
-            self.display_surface.blit(level_surface, level_rect)
 
     def show_profile_tab(self, rect, battler):
         """프로필 탭 내용 표시 (추후 구현)"""

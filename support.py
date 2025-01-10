@@ -545,81 +545,6 @@ class EffectManager:
             return None
         # 가장 최근에 적용된 상태이상 반환
         return status_effects[-1].source.replace('status_', '')
-# 효과 적용 함수들도 EffectManager의 메서드로 추가
-    def apply_equipment_effects(self, battler):
-        """장비 효과 적용"""
-        for equip_name in battler.equips:
-            if equip_name not in EQUIP_PROPERTIES:
-                continue
-                
-            equip_data = EQUIP_PROPERTIES[equip_name]
-            
-            # 효과를 퍼센트와 고정값으로 분리
-            percent_effects = {}
-            flat_effects = {}
-            
-            for stat, value in equip_data['STAT'].items():
-                if 'multiplier' in stat.lower():
-                    percent_effects[stat] = value
-                else:
-                    flat_effects[stat] = value
-            
-            # 퍼센트 효과 추가
-            if percent_effects:
-                effect = Effect(
-                    effect_type='equipment',
-                    effects=percent_effects,
-                    source=f"equipment_{equip_name}",
-                    is_percent=True
-                )
-                self.add_effect(battler, effect)
-                
-            # 고정값 효과 추가
-            if flat_effects:
-                effect = Effect(
-                    effect_type='equipment',
-                    effects=flat_effects,
-                    source=f"equipment_{equip_name}"
-                )
-                self.add_effect(battler, effect)
-
-    def apply_passive_skills(self, battler):
-        """Apply or update conditional passive skill effects"""
-        # Remove old conditional passive effects
-        battler.effects = [e for e in battler.effects 
-                        if not (e.type == 'passive_conditional' and 
-                                e.source.startswith('passive_conditional_'))]
-        
-        for skill_name, skill_level in battler.skills.items():
-            skill_info = SKILL_PROPERTIES.get(skill_name)
-            if not skill_info or skill_info['Type'] != 'Passive_Conditional':
-                continue
-                
-            print_if(self.SW_debug,f"\n[Applying Conditional Passive: {skill_name}]")
-            condition = skill_info['Condition'][skill_level]
-                
-            # Add percent-based effects
-            if 'Buff_%' in skill_info:
-                effect = Effect(
-                    effect_type='passive_conditional',
-                    effects=skill_info['Buff_%'][skill_level],
-                    source=f"passive_conditional_{skill_name}",
-                    condition=condition,
-                    is_percent=True
-                )
-                battler.effects.append(effect)
-                print_if(self.SW_debug,f"Added percent effect: {effect.effects}")
-                
-            # Add flat effects
-            if 'Buff' in skill_info:
-                effect = Effect(
-                    effect_type='passive_conditional',
-                    effects=skill_info['Buff'][skill_level],
-                    source=f"passive_conditional_{skill_name}",
-                    condition=condition
-                )
-                battler.effects.append(effect)
-                print_if(self.SW_debug,f"Added flat effect: {effect.effects}")
 
     def apply_temporary_buff(self, battler, buff_name, effects, duration=None):
         """임시 버프 효과 적용"""
@@ -744,4 +669,4 @@ class MessageDialog:
                 self.is_instant = True
 
         return None
-            
+

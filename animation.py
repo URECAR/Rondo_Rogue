@@ -589,9 +589,9 @@ class AnimationManager:
         self.active_animations = [anim for anim in self.active_animations if anim.alive()]
         return len(self.active_animations) > 0
 
-    def create_animation(self, pos, animation_type, wait=False, value=None, track_target=False):
+    def create_animation(self, target, animation_type, wait=False, value=None, track_target=False):
         """애니메이션 생성"""
-        animation = Animation(pos, animation_type, value,track_target=track_target)
+        animation = Animation(target, animation_type, value,track_target=track_target)
         self.visible_sprites.add(animation)
 
         if wait:

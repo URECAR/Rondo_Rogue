@@ -1,6 +1,6 @@
 # common_method.py
 from database import SKILL_PROPERTIES
-from csv import reader
+import csv
 from os import walk 
 import pygame
 
@@ -25,11 +25,48 @@ def istarget(skill,selected_battler, battler,facing=None):
 def import_csv_layout(path):
     terrain_map = []
     with open(path) as level_map:
-        layout = reader(level_map,delimiter = ',')
+        layout = csv.reader(level_map,delimiter = ',')
         for row in layout:
             terrain_map.append(list(row))
         return terrain_map
+def combine_range_csvs(csv_paths):
+    # 첫 번째 CSV를 읽어서 기본 크기 결정
+    with open(csv_paths[0]) as f:
+        reader = csv.reader(f)
+        base_map = [row for row in reader]
     
+    # 기본 맵의 크기
+    height = len(base_map)
+    width = len(base_map[0]) if height > 0 else 0
+    
+    # 결과 맵 초기화 (모두 -1로)
+    result_map = [['-1' for _ in range(width)] for _ in range(height)]
+    
+    # 각 CSV 파일 처리
+    for csv_path in csv_paths:
+        with open(csv_path) as f:
+            reader = csv.reader(f)
+            current_map = [row for row in reader]
+            
+            # 각 위치 검사
+            for y in range(height):
+                for x in range(width):
+                    current_value = current_map[y][x]
+                    
+                    # 현재 값이 -1이 아닌 경우
+                    if current_value != '-1':
+                        # 결과 맵의 현재 위치가 -1인 경우
+                        if result_map[y][x] == '-1':
+                            result_map[y][x] = [current_value]
+                        # 결과 맵의 현재 위치가 이미 리스트인 경우
+                        elif isinstance(result_map[y][x], list):
+                            result_map[y][x].append(current_value)
+                        # 결과 맵의 현재 위치가 단일 값인 경우
+                        else:
+                            result_map[y][x] = [current_value]
+    
+    return result_map
+
 def import_folder(path):
     surface_list = []
 

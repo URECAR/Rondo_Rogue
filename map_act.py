@@ -137,11 +137,7 @@ class MapAction:
                 if stat == 'Cur_HP':
                     heal_amount = int(battler.stats['Max_HP'] * value / 100)
                     battler.Cur_HP = min(battler.stats['Max_HP'], battler.Cur_HP + heal_amount)
-                    self.animation_manager.create_animation(
-                        (battler.collision_rect.centerx, battler.collision_rect.top - 10),
-                        'DAMAGE',
-                        value=heal_amount
-                    )
+                    self.animation_manager.create_animation((battler.collision_rect.centerx, battler.collision_rect.top - 10),'DAMAGE',value=heal_amount)
                 elif stat == 'Cur_MP':
                     heal_amount = int(battler.stats['Max_MP'] * value / 100)
                     battler.Cur_MP = min(battler.stats['Max_MP'], battler.Cur_MP + heal_amount)
@@ -151,11 +147,7 @@ class MapAction:
             for stat, value in effect_data['Heal'].items():
                 if stat == 'Cur_HP':
                     battler.Cur_HP = min(battler.stats['Max_HP'], battler.Cur_HP + value)
-                    self.animation_manager.create_animation(
-                        (battler.collision_rect.centerx, battler.collision_rect.top - 10),
-                        'DAMAGE',
-                        value=value
-                    )
+                    self.animation_manager.create_animation((battler.collision_rect.centerx, battler.collision_rect.top - 10),'DAMAGE',value=value)
                 elif stat == 'Cur_MP':
                     battler.Cur_MP = min(battler.stats['Max_MP'], battler.Cur_MP + value)
         
@@ -164,39 +156,21 @@ class MapAction:
         
         # 퍼센트 효과가 있다면
         if 'Buff_%' in effect_data:
-            effect = Effect(
-                effect_type='item_buff',
-                effects=effect_data['Buff_%'],
-                source=f"item_{item_name}_percent",
-                remaining_turns=duration,
-                is_percent=True
-            )
+            effect = Effect(effect_type='item_buff',effects=effect_data['Buff_%'],source=f"item_{item_name}_percent",remaining_turns=duration,is_percent=True)
             self.effect_manager.add_effect(battler, effect)
         
         # 고정값 효과가 있다면
         if 'Buff' in effect_data:
-            effect = Effect(
-                effect_type='item_buff',
-                effects=effect_data['Buff'],
-                source=f"item_{item_name}",
-                remaining_turns=duration
-            )
+            effect = Effect(effect_type='item_buff',effects=effect_data['Buff'],source=f"item_{item_name}",remaining_turns=duration)
             self.effect_manager.add_effect(battler, effect)
         
        # 영구 Change 효과가 있다면
         if 'Change' in effect_data:
-            effect = Effect(
-                effect_type='change',
-                effects=effect_data['Change'],
-                source=f"change_{item_name}",
-                remaining_turns=None  # 영구 지속
-            )
+            effect = Effect(effect_type='change',effects=effect_data['Change'],source=f"change_{item_name}",remaining_turns=None)  # 영구 지속
             self.effect_manager.add_effect(battler, effect)
         
         # 인벤토리에서 아이템 제거
         self.selected_battler.inventory.remove(item_name)
-        
-
         
         return True
 
@@ -413,6 +387,20 @@ class MapAction:
             # 버프 시각 효과
             self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),skill_info.get('animate', 'SHIELD'),wait=True)
             
+        # 짧은 버프 스킬인 경우
+        if skill_info['skill_type'] == 'buff_temp':
+            buff_duration = None
+            # 퍼센트 효과 적용
+            if 'Buff_%' in skill_info:
+                effect = Effect(effect_type='buff_until_turn',effects=skill_info['Buff_%'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration,is_percent=True)
+                self.effect_manager.add_effect(target, effect)
+            # 고정값 효과 적용
+            if 'Buff' in skill_info:
+                effect = Effect(effect_type='buff_until_turn',effects=skill_info['Buff'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration)
+                self.effect_manager.add_effect(target, effect)
+            # 버프 시각 효과
+            self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),skill_info.get('animate', 'SHIELD'),wait=True)
+            
         elif skill_info.get('Heal'):
             heal_amount = skill_info['Heal'][skill_level]+ self.selected_battler.stats["INT"]
             target.Cur_HP = min(target.stats["Max_HP"], target.Cur_HP + heal_amount )
@@ -439,68 +427,6 @@ class MapAction:
                             target.effects.append(effect_percent)
                         target.effects.append(effect)
                 self.effect_manager.update_effects(target)
-
-    def apply_support_skill_effects(self, source_battler, target_battler, skill_name, skill_level):
-        """지원 스킬 효과 적용 (예: 전장의 함성)"""
-        skill_info = SKILL_PROPERTIES[skill_name]
-        
-        if not skill_info.get('Support_type'):
-            return
-            
-        # 회복 효과 처리
-        if skill_info['Support_type'] == 'Recovery' and 'Support' in skill_info:
-            support_values = skill_info['Support'][skill_level]
-            for stat, value in support_values.items():
-                if stat == 'Cur_HP':
-                    heal_amount = value
-                    target_battler.Cur_HP = min(target_battler.stats["Max_HP"], 
-                                              target_battler.Cur_HP + heal_amount)
-                    self.animation_manager.create_animation(
-                        (target_battler.collision_rect.centerx, 
-                         target_battler.collision_rect.top - 10),
-                        'DAMAGE',
-                        value=heal_amount
-                    )
-
-        # 소스 스탯 기반 버프
-        elif skill_info['Support_type'] == 'Boost':
-            if 'Support_%' in skill_info:
-                buff_data = {'percent': {}}
-                for stat, percent in skill_info['Support_%'][skill_level].items():
-                    buff_value = int(source_battler.stats[stat] * (percent / 100))
-                    buff_data['percent'][stat] = buff_value
-                self.effect_manager.apply_temporary_buff(
-                    target_battler,
-                    f"support_{skill_name}",
-                    buff_data,
-                    duration=1  # 이동 페이즈 동안만 지속
-                )
-
-        # 기본 스탯 버프
-        elif skill_info['Support_type'] == 'Boost_self':
-            buff_data = {'percent': {}, 'flat': {}}
-            
-            if 'Support' in skill_info:
-                for stat, value in skill_info['Support'][skill_level].items():
-                    buff_data['flat'][stat] = value
-                    
-            if 'Support_%' in skill_info:
-                for stat, percent in skill_info['Support_%'][skill_level].items():
-                    buff_data['percent'][stat] = percent
-                    
-            if buff_data['percent'] or buff_data['flat']:
-                self.effect_manager.apply_temporary_buff(
-                    target_battler,
-                    f"support_self_{skill_name}",
-                    buff_data,
-                    duration=1
-                )
-
-        if buff_data['percent'] or buff_data['flat']:
-            # 버프 적용 시 시각 효과
-            self.animation_manager.create_animation(target_battler, 'AURA', wait=True)
-        
-        self.map_action.effect_manager.update_effects(target_battler)
 
     def check_magic_range(self, battler, skill):
         skill_range = SKILL_PROPERTIES[skill].get('Range', {}).get(battler.skills[skill], 0)
@@ -547,52 +473,97 @@ class MapAction:
 
     def get_tiles_in_line(self, start_pos, end_pos, half_width=0.1):
         """
-        두 위치 사이의 직선 경로에 있는 타일들을 반환
+        두 위치 사이의 직선이 지나는 타일들을 순서대로 찾고,
+        각 타일에서 다음 타일로의 이동이 가능한지 체크
         start_pos: 시작 위치 (Vector2)
         end_pos: 끝 위치 (Vector2)
-        half_width: 직선으로부터 타일을 체크할 거리
         """
         tiles = []
-        checked = set()  # 이미 체크한 타일 위치를 저장
         
-        # 두 점 사이의 거리와 방향 계산
-        dx, dy = end_pos.x - start_pos.x, end_pos.y - start_pos.y
-        distance = max(abs(dx), abs(dy))
-        if distance == 0:
-            return tiles
+        # 시작점과 끝점의 정수 좌표
+        x1, y1 = int(start_pos.x), int(start_pos.y)
+        x2, y2 = int(end_pos.x), int(end_pos.y)
+        
+        # 브레젠험 알고리즘으로 선이 지나는 타일들 찾기
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        sx = 1 if x2 > x1 else -1
+        sy = 1 if y2 > y1 else -1
+        err = dx - dy
+        
+        x, y = x1, y1
+        path_tiles = []
+        
+        while True:
+            path_tiles.append((x, y))
+            if x == x2 and y == y2:
+                break
+                
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
+        
+        # 각 타일에서 다음 타일로의 이동이 가능한지 체크
+        for i in range(len(path_tiles) - 1):
+            current_x, current_y = path_tiles[i]
+            next_x, next_y = path_tiles[i + 1]
             
-        # 각 단계별 증가량
-        step_x, step_y = dx / distance, dy / distance
-        
-        # 직선을 따라 이동하면서 타일 체크
-        for i in range(int(distance) + 1):
-            # 현재 위치 계산
-            current_x = (start_pos.x + 0.5) + step_x * i
-            current_y = (start_pos.y + 0.5) + step_y * i
-
-            # 주변 타일 체크 (직선으로부터 half_width 거리 이내의 타일)
-            for ox in [-half_width, 0, half_width]:
-                for oy in [-half_width, 0, half_width]:
-                    check_x = int(current_x + ox)
-                    check_y = int(current_y + oy)
+            # 맵 범위 체크
+            if (0 <= current_x < len(self.level.level_data["ranges"][0]) and 
+                0 <= current_y < len(self.level.level_data["ranges"])):
+                
+                # 다음 타일과의 방향 차이로 이동 방향 결정
+                dx = next_x - current_x
+                dy = next_y - current_y
+                
+                # 8방향 이동 판정
+                # 0: 상단, 1: 우상단, 2: 우단, 3: 우하단, 4: 하단, 5: 좌하단, 6: 좌단, 7: 좌상단
+                direction = -1
+                if dx == 0 and dy == -1: direction = 0      # 상
+                elif dx == 1 and dy == -1: direction = 1    # 우상
+                elif dx == 1 and dy == 0: direction = 2     # 우
+                elif dx == 1 and dy == 1: direction = 3     # 우하
+                elif dx == 0 and dy == 1: direction = 4     # 하
+                elif dx == -1 and dy == 1: direction = 5    # 좌하
+                elif dx == -1 and dy == 0: direction = 6    # 좌
+                elif dx == -1 and dy == -1: direction = 7   # 좌상
+                
+                # 현재 타일의 range_data 확인
+                range_value = self.level.level_data["ranges"][current_x][current_y]
+                is_blocked = False
+                
+                # range_data가 리스트인 경우 (방향별 제한이 있는 경우)
+                if isinstance(range_value, list):
+                    is_blocked = str(direction) in range_value
+                # 완전 차단된 경우
+                elif range_value == '40':
+                    is_blocked = True
                     
-                    # 이미 체크한 타일이면 스킵
-                    tile_pos = (check_x, check_y)
-                    if tile_pos in checked:
-                        continue
-                    checked.add(tile_pos)
-
-                    # 맵 범위 체크
-                    if (0 <= check_x < len(self.level.level_data["moves"][0]) and 0 <= check_y < len(self.level.level_data["moves"][1])):
-                        # moves 데이터로 타일 이동 가능 여부 체크
-                        move_value = self.level.level_data["moves"][check_x][check_y]
-                        tile_blocked = move_value == '-1'
-                        
-                        tiles.append({
-                            'pos': pygame.math.Vector2(check_x, check_y),
-                            'blocked': tile_blocked
-                        })
-                        
+                tiles.append({
+                    'pos': pygame.math.Vector2(current_x, current_y),
+                    'blocked': is_blocked
+                })
+                
+                # 현재 타일이 막혀있으면 더 이상 진행하지 않음
+                if is_blocked:
+                    break
+        
+        # 마지막 타일 추가
+        if path_tiles:
+            last_x, last_y = path_tiles[-1]
+            if (0 <= last_x < len(self.level.level_data["ranges"][0]) and 
+                0 <= last_y < len(self.level.level_data["ranges"])):
+                range_value = self.level.level_data["ranges"][last_y][last_x]
+                is_blocked = range_value == '40'
+                tiles.append({
+                    'pos': pygame.math.Vector2(last_x, last_y),
+                    'blocked': is_blocked
+                })
+        
         return tiles
 
     def endturn(self):

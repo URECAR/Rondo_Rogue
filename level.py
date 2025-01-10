@@ -12,7 +12,7 @@ from map_act import MapAction
 from character import Character
 from database import MAP1
 from animation import AnimationManager
-from common_method import import_csv_layout
+from common_method import import_csv_layout,combine_range_csvs
 class Level:
     def __init__(self):
 
@@ -40,7 +40,15 @@ class Level:
             'layer3': import_csv_layout('../map2/map2._Layer3.csv'),
             'layerAbove': import_csv_layout('../map2/map2._LayerAbove.csv'),
             'tree': import_csv_layout('../map2/map2._Tree.csv'),
-            'move_data': import_csv_layout('../map2/map2._Move_Data.csv')
+            'move_data': import_csv_layout('../map2/map2._Move_Data.csv'),
+            'range_data': combine_range_csvs(['../map2/map2._Range_Up.csv',
+                                               '../map2/map2._Range_UpRight.csv',
+                                               '../map2/map2._Range_Right.csv',
+                                               '../map2/map2._Range_RightDown.csv',
+                                               '../map2/map2._Range_Down.csv',
+                                               '../map2/map2._Range_DownLeft.csv',
+                                               '../map2/map2._Range_Left.csv',
+                                               '../map2/map2._Range_LeftUp.csv',])
         }
         
         # 타일셋 로드
@@ -55,15 +63,20 @@ class Level:
             tile_images[str(tile_id)] = tileset.subsurface((x, y, TILESIZE, TILESIZE))
 
         # moves 데이터 처리
-        moves_data = map_data['move_data']
+        
+            
         self.level_data = {
             'Map_Max_x': self.visible_sprites.Mapmax.x,
             'Map_Max_y': self.visible_sprites.Mapmax.y,
             'moves': [['-1' if map_data['move_data'][y][x] == '0' else map_data['move_data'][y][x] 
                     for y in range(len(map_data['move_data']))] 
-                    for x in range(len(map_data['move_data'][0]))]
+                    for x in range(len(map_data['move_data'][0]))],
+            'ranges': [[map_data['range_data'][y][x]
+                    for y in range(len(map_data['range_data']))]
+                    for x in range(len(map_data['range_data'][0]))]
         }
-
+        for data in self.level_data['ranges']:
+            print(data)
         # Layer1과 LayerAbove를 위한 Surface 생성
         layer1_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
         layerAbove_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
@@ -185,7 +198,7 @@ class Level:
         self.map_action.update()
         self.ui.display()
         # debug(self.battlers['Player1'].effect_manager.get_active_effects(self),)
-        debug(self.battlers['Player1'].effects)
+        # debug(self.battlers['Player1'].effects)
         # debug(self.map_action.current_state, x = 70)
         # debug(self.map_action.elapsed_turn, y= 50)
         # debug(self.battlers['Player1'].effects, y= 70)

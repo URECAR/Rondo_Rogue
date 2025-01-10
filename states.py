@@ -109,6 +109,7 @@ class Player_Control_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
     def enter(self):
+        self.map_action.selected_battler.inactive = False
         self.cursor.move_lock = False
         self.cursor.select_lock = False
         self.map_action.cur_moves = self.map_action.selected_battler.stats['Mov']
@@ -386,6 +387,9 @@ class Phase_Change_State(State):
                         battler.inactive = True
                     else:
                         battler.inactive = False
+                    for effect in battler.effects:
+                        if effect.type == 'buff_until_turn':
+                            self.map_action.effect_manager.remove_effect(battler, effect_type=effect.type)
 
             if self.map_action.current_phase == 'Ally':
                 phase_anim = self.map_action.animation_manager.create_animation(None,'PHASE_CHANGE',wait=True,value=[self.level.visible_sprites.offset, 'Player'])
@@ -434,43 +438,42 @@ class Interact_State(State):
                 self.map_action.selected_battler.actlist.append('act_for_attack')
                 self.map_action.update_time = pygame.time.get_ticks() + self.map_action.selected_battler.attack_delay
                 return 'interact','melee1'
-            if self.substate == 'melee1' and self.map_action.update_time < pygame.time.get_ticks():
+
+            elif self.substate == 'melee1' and self.map_action.update_time < pygame.time.get_ticks():
                 # 공격 효과 계산 및 적용
                 attacker = self.map_action.selected_battler
                 target = self.map_action.target_battler
                 Damage_Bonus_multiplier, vurnerable = CombatFormulas.calculate_directional_bonus(attacker, target)
 
                 # 카운터 확인
-                if CombatFormulas.check_counter(self,attacker, target, vurnerable):
+                if CombatFormulas.check_melee_counter(self,attacker, target, vurnerable):
                     self.map_action.animation_manager.create_animation(attacker.collision_rect.center, 'EMOTE_SURPRISE', wait=True)
                     target.battle_return(attacker, move_type='counter')
                     self.map_action.update_time = pygame.time.get_ticks() + 500
                     return 'interact','melee_counter1'
                     
                 # 히트 체크
-                if CombatFormulas.check_evasion(self,attacker, target, vurnerable):
+                if CombatFormulas.check_melee_evasion(self,attacker, target, vurnerable):
                     target.battle_return(attacker, move_type='evasion')
                     self.map_action.sound_manager.play_sound(**SOUND_PROPERTIES['EVASION'])
                     return 'interact','melee2'
                     
                 # 크리티컬 확인
-                if CombatFormulas.check_critical(self,attacker, target, vurnerable):
+                if CombatFormulas.check_melee_critical(self,attacker, target, vurnerable):
                     is_critical = True
-                    self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'CRITICAL',wait=True)
+                    self.map_action.animation_manager.create_animation(target,'CRITICAL',wait=True)
+                    self.level.visible_sprites.enable_zoom()
+                    self.level.visible_sprites.zoom_to_battler(target)
+                    self.level.visible_sprites.focus_on_target(target)
                 else:
                     is_critical = False
                     
                 damage = CombatFormulas.calculate_melee_damage(self,attacker, target, Damage_Bonus_multiplier, is_critical)
-                                    
-                # self.map_action.animation_manager.clear_active_animations()
-                self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'SLASH',wait=True)
-                
+                self.map_action.animation_manager.create_animation(target,'SLASH',wait=True)
                 target.battle_return(attacker, move_type='knockback')
                 self.map_action.Damage(attacker, target, damage, "Melee", is_critical = is_critical)
-                
-                # ZOC 처리는 이제 효과로 처리됨
-                if CombatFormulas.check_ZOC(self,attacker, target, vurnerable):
-                    self.map_action.animation_manager.create_animation((target.collision_rect.midtop[0], target.collision_rect.midtop[1]),'SHIELD2',wait=True)
+                if CombatFormulas.check_ZOC(self,attacker, target, vurnerable, is_critical):
+                    self.map_action.animation_manager.create_animation(target,'SHIELD2',wait=True)
                     # 이동 취소
                     while self.map_action.move_roots:
                         self.map_action.move_roots[-1][0].kill()
@@ -635,32 +638,19 @@ class Interact_State(State):
                 target = self.map_action.target_battler
 
                 # 명중 판정
-                range_accuracy = (attacker.stats["Accuracy_rate"] - target.stats["Ranged_evasion_chance"] +(attacker.stats["DEX"] - target.stats["DEX"]) * 0.02)
-                self.map_action.Acted.append([target,'Hit_Check',range_accuracy])
-                if range_accuracy > random.random():
-                    damage = (attacker.stats['STR'] + attacker.stats['DEX'] - target.stats['RES']) * target.stats["Ranged_defense_multiplier"] * attacker.stats["Ranged_attack_multiplier"]
-                    self.map_action.Acted.append([target,'Hit_Check','Executed'])
-                    
-                    # 크리티컬 판정
-                    crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.6) * 0.01
-                    self.map_action.Acted.append([target,'Critical_Check',crit_chance])
-                    if random.random() < crit_chance:
-                        self.map_action.Acted.append([target,'Critical_Check','Executed'])
-                        self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'CRITICAL',wait=True)
-                        damage *= attacker.stats["Critical_attack_multiplier"]
-                    # 공격 효과 애니메이션
-                    # self.map_action.animation_manager.clear_active_animations()
-                    self.map_action.animation_manager.create_animation(target.collision_rect.center,'RANGE_HIT',wait=True)
-                    target.battle_return(attacker, move_type='knockback')
-
-                    # 데미지 적용
-                    self.map_action.Damage(attacker, target, damage, "Range",is_critical=self.map_action.Acted[-1][2] == 'Executed')
-
-                else:
-                    self.map_action.Acted.append([target,'Hit_Check','Evaded'])
+                if CombatFormulas.check_range_evasion(self,attacker, target):
                     target.battle_return(attacker, move_type='range_evasion')
                     self.map_action.sound_manager.play_sound(**SOUND_PROPERTIES['EVASION'])
-
+                else:
+                    is_critical = False
+                    if CombatFormulas.check_range_critical(self,attacker, target):
+                        is_critical = True
+                        self.map_action.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),'CRITICAL',wait=True)
+                    damage = CombatFormulas.calculate_range_damage(self,attacker, target, is_critical)
+                    self.map_action.animation_manager.create_animation(target.collision_rect.center,'RANGE_HIT',wait=True)
+                    target.battle_return(attacker, move_type='knockback')
+                    # 데미지 적용
+                    self.map_action.Damage(attacker, target, damage, "Range",is_critical=is_critical)
                 self.map_action.update_time = pygame.time.get_ticks() + 500
                 return 'interact','range3'
 

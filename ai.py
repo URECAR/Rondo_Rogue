@@ -204,7 +204,7 @@ class AI():
             target_battler = attackable_target[0]
         if target_battler:
             self.map_action.target_battler = target_battler
-            # self.level.cursor.rect.center = self.selected_battler.collision_rect.center
+            # self.level.cursor.rect.center = self.selected_battler.gfx_rect.center
             # self.level.cursor = self.selected_battler.pos
             self.level.visible_sprites.focus_on_target(self.selected_battler)
             self.map_action.selected_battler.update_facing_direction(target_battler.pos - self.map_action.selected_battler.pos)
@@ -220,7 +220,7 @@ class AI():
                     Sensable_Enemies.append(battler)
             MAX_CHA_battler = max(Sensable_Enemies, key=lambda battler: battler.stats["CHA"])
             path = self.map_action.find_approach_path(self.selected_battler.pos, MAX_CHA_battler.pos, self.selected_battler.stats["Mov"], Sense_Enemy + 5)
-            if path:
+            if path and len(path) > 1:
                 route = path[0][1]  # path[0]은 첫 번째 경로, [1]은 좌표 리스트
                 cur_moves = self.selected_battler.stats["Mov"]
                 valid_route = []

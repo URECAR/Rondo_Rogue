@@ -7,14 +7,14 @@ class MAP1:
         'Max_Y' : 25 * TILESIZE,   
     }
     spawns = {
-        'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
-        'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
+        # 'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
+        # 'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
         'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
-        'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
-        'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
-        'Army_Archer': {'Spawn': [9, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
+        # 'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
+        # 'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
+        'Army_Archer': {'Spawn': [12, 7], 'Level': 6, 'base_team': 'Enemy'},
+        # 'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
+        # 'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
     }
 class CharacterDatabase:
     data = {
@@ -59,16 +59,18 @@ class CharacterDatabase:
             'inventory': ['HP_Potion', 'MP_Potion', 'Shield_Potion','Battle_Potion'],
             'skills': {
                 '불굴의 의지' : 1,
-                '무념의 기보' : 1,
+                # '무념의 기보' : 1,
                 '체력 단련' : 3,
-                # '아이스' : 1,
-                # '테스트스킬1' : 1,
-                # '테스트스킬2' : 1,
+                '아이스' : 1,
+                '테스트스킬1' : 1,
+                '테스트스킬2' : 1,
+                '근접 방어 태세' : 1,
                 '테스트스킬3' : 1,
-                # '테스트스킬5' : 1,
-                # '상시 근접 방어' : 1,
-                # '저돌맹진' : 1,
-                # '무념의 기보' : 3,
+                '군의학' : 1,
+                '테스트스킬5' : 1,
+                '상시 근접 방어' : 1,
+                '저돌맹진' : 1,
+                '무념의 기보' : 3,
                 # 'Z.O.C 무시' : 1,
                 '신중함' : 3,
             },
@@ -101,8 +103,8 @@ class CharacterDatabase:
                 },
                 'move_speed': 8,
                 'die_animation': 'SPREAD_LINE',
-                'attack_delay': 400,
-                'attack_afterdelay': 100,
+                'attack_delay': 100,
+                'attack_afterdelay': 400,
                 'size': 2.0,  # 2배 크기
                 'offset': [0, -32]  # 중앙에서 위로 16픽셀 이동
 
@@ -121,7 +123,7 @@ class CharacterDatabase:
             'name'  : '덩굴정령',
             'base_stats': {
                 'Max_HP': 150, 'Max_MP': 20, 'STR': 12, 'DEX': 25, 'INT': 8, 'RES': 12,
-                'CHA': 25, 'Max_EXP': 30, 'Mov': 5
+                'CHA': 25, 'Max_EXP': 30, 'Mov': 10
             },
             'growth_stats': {
                 # 기본 성장률
@@ -391,25 +393,36 @@ class CharacterDatabase:
         }
         base_stats.update(combat_stats)  # stats에 combat_stats 통합
         return base_stats
-# Database.py
 class CombatFormulas:
-    @staticmethod
     def calculate_melee_damage(self,attacker, target, Damage_Bonus_multiplier, is_critical):
         """근접 공격 데미지 계산 공식"""
         base_damage = (attacker.stats['STR'] * 2 - target.stats['RES'])
         multiplier = attacker.stats['Melee_attack_multiplier'] * target.stats['Melee_defense_multiplier'] * Damage_Bonus_multiplier
         if is_critical:
             multiplier *= attacker.stats['Critical_attack_multiplier']
-        return max(base_damage * multiplier, 0)
+        Final_Damage = int(max(base_damage * multiplier, 0))
+        self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
+        return Final_Damage
 
-    @staticmethod
-    def calculate_magic_damage(attacker, defender, skill_power):
+    def calculate_range_damage(self, attacker, target, is_critical):
+        """원거리 공격 데미지 계산 공식"""
+        base_damage = (attacker.stats['STR'] + attacker.stats['DEX'] - target.stats['RES'])
+        multiplier = attacker.stats['Ranged_attack_multiplier'] * target.stats['Ranged_defense_multiplier']
+        if is_critical:
+            multiplier *= attacker.stats['Critical_attack_multiplier']
+        Final_Damage = int(max(base_damage * multiplier, 0))
+        self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
+        return Final_Damage
+
+    def calculate_magic_damage(self,attacker, defender, skill_power):
         """마법 공격 데미지 계산 공식"""
         base_damage = attacker.stats['INT'] * skill_power - defender.stats['RES']
         multiplier = attacker.stats['Magic_attack_multiplier'] * defender.stats['Magic_defense_multiplier']
-        return max(base_damage * multiplier, 0)
+        Final_Damage = int(max(base_damage * multiplier, 0))
+        self.map_action.Acted.append([defender,'Damage_Calculated', Final_Damage])
+        return Final_Damage
 
-    def check_counter(self, attacker, target, vurnerable):
+    def check_melee_counter(self, attacker, target, vurnerable):
         total_counter_chance = (target.stats["Counter_Chance"] + (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5 - vurnerable["counter"]) * 0.01
         self.map_action.Acted.append([target,'Counter_Check',total_counter_chance])
         if total_counter_chance > random.random():
@@ -418,7 +431,7 @@ class CombatFormulas:
         else:
             return False 
 
-    def check_evasion(self, attacker, target, vurnerable):
+    def check_melee_evasion(self, attacker, target, vurnerable):
         total_hit_chance = (1 + ((attacker.stats["DEX"] - target.stats["DEX"]) * 2 + attacker.stats["Accuracy_rate"] - target.stats["Melee_evasion_chance"] + vurnerable["evasion"]) * 0.01)
         self.map_action.Acted.append([target,'Hit_Check',total_hit_chance])
         if total_hit_chance < random.random():
@@ -427,25 +440,45 @@ class CombatFormulas:
         else:
             return False
 
-    def check_critical(self, attacker, target, vurnerable):
+    def check_range_evasion(self, attacker, target):
+        total_accuracy = (attacker.stats["Accuracy_rate"] - target.stats["Ranged_evasion_chance"] +(attacker.stats["DEX"] - target.stats["DEX"]) * 0.02)
+        self.map_action.Acted.append([target,'Hit_Check','Executed'])
+        if total_accuracy < random.random():
+            self.map_action.Acted.append([target,'Hit_Check','Evaded'])
+            return True
+        else:
+            self.map_action.Acted.append([target,'Hit_Check','Executed'])
+            return False
+
+    def check_melee_critical(self, attacker, target, vurnerable):
         total_crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.5 + vurnerable['critical']) * 0.01
         self.map_action.Acted.append([target,'Critical_Check',total_crit_chance])
-        if random.random() < total_crit_chance:
+        if total_crit_chance > random.random():
             self.map_action.Acted.append([target,'Critical_Check','Executed'])
             return True
         else:
             return False
-    
-    def check_ZOC(self, attacker, target, vurnerable):
+
+    def check_range_critical(self, attacker, target):
+        total_crit_chance = (attacker.stats["Critical_Chance"] + attacker.stats["DEX"] * 0.6) * 0.01
+        self.map_action.Acted.append([target,'Critical_Check',total_crit_chance])
+        if total_crit_chance > random.random():
+            self.map_action.Acted.append([target,'Critical_Check','Executed'])
+            return True
+        else:
+            return False
+                
+    def check_ZOC(self, attacker, target, vurnerable, is_critical):
         total_zoc_check = (target.stats["ZOC_Chance"] - attacker.stats["ZOC_Ignore_Chance"] - vurnerable['zoc']) * 0.01
         self.map_action.Acted.append([target,'ZOC_Check',total_zoc_check])    
-        if target.Cur_HP > 0 and random.random() < total_zoc_check:
+        if target.Cur_HP > 0 and random.random() < total_zoc_check and not is_critical:
             self.map_action.Acted.append([target,'ZOC_Check','Executed'])
             return True
         else:
             return False
+
     def calculate_directional_bonus(attacker, target):
-        opposite_directions = {"left": "right", "right": "left", "up": "down", "down": "up"}
+        opposite_directions = {"left": "right", "right": "left", "up": "down"}
         hit_location = 'rear' if target.facing == attacker.facing else 'side' if target.facing != opposite_directions.get(attacker.facing) else 'front'
         hit_stats = {
                     'front': {'multiplier': 1.0, 'vurnerable': {'zoc': 5, 'evasion': 0, 'counter': 0, 'critical': 0}},
@@ -1182,12 +1215,12 @@ SKILL_PROPERTIES = {
         'Type': 'Active',
         'style': 'default',
         'Description' : '''사용 시, 다음 자신 페이즈까지 RES%를 올린다''',
-        'skill_type' : 'buff',
+        'skill_type' : 'buff_temp',
         'target' : ['Self'],
         'casting': 'MAGIC_CIRCLE',
         'animate_type'  : 'default',
         'animate'   : 'AURA',
-        'duration'  : 1,
+        'duration'  : None,
         'Buff_%': {
             1: {'RES': 20},
             2: {'RES': 40},
@@ -1198,16 +1231,16 @@ SKILL_PROPERTIES = {
         'Type': 'Active',
         'style': 'default',
         'Description' : '''사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다''',
-        'skill_type' : 'buff',
+        'skill_type' : 'buff_temp',
         'target' : ['Self'],
         'casting': 'MAGIC_CIRCLE',
         'animate_type'  : 'default',
         'animate'   : 'AURA',
-        'duration'  : 1,
-        'Buff_%': {
-            1: {'Melee_defense_multiplier' : -40},
-            2: {'Melee_defense_multiplier' : -60},
-            3: {'Melee_defense_multiplier' : -70},
+        'duration'  : None,
+        'Buff': {
+            1: {'Melee_defense_multiplier' : -0.4},
+            2: {'Melee_defense_multiplier' : -0.6},
+            3: {'Melee_defense_multiplier' : -0.7},
         },
     },
     # --- 액티브 - 매직 스킬 --- #
