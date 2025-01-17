@@ -75,8 +75,6 @@ class Level:
                     for y in range(len(map_data['range_data']))]
                     for x in range(len(map_data['range_data'][0]))]
         }
-        for data in self.level_data['ranges']:
-            print(data)
         # Layer1과 LayerAbove를 위한 Surface 생성
         layer1_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
         layerAbove_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
@@ -198,10 +196,12 @@ class Level:
         self.map_action.update()
         self.ui.display()
         # debug(self.battlers['Player1'].effect_manager.get_active_effects(self),)
-        # debug(self.battlers['Player1'].effects)
+        debug(self.battlers['Player3'].pose)
+        debug(self.cursor.pos, x = 150)
         # debug(self.map_action.current_state, x = 70)
         # debug(self.map_action.elapsed_turn, y= 50)
-        # debug(self.battlers['Player1'].effects, y= 70)
+        debug(self.battlers['Player1'].effects, y= 70)
+
 class YSortCameraGroup(pygame.sprite.Group):
     def __init__(self):
         super().__init__()

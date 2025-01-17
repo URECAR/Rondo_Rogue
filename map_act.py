@@ -49,6 +49,7 @@ class MapAction:
         self.step_enemy_turns = False
         self.movable_tiles = []
         self.highlight_tiles = []
+        self.animate_pos = None
         self.current_skill_index = 0  # 선택된 스킬 인덱스 추가
         self.Acted = []
         self.battle_exp_gain = 0
@@ -88,7 +89,7 @@ class MapAction:
         for battler in self.level.battler_sprites:
             if battler.tmp_exp_gain:
                 # 경험치 획득량 계산 (CHA와 EXP 배율 적용)
-                exp_gain = battler.tmp_exp_gain * (1 + 0.01 * battler.stats["CHA"]) * battler.stats["EXP_multiplier"]
+                exp_gain = battler.tmp_exp_gain * (1 + 0.01 * battler.stats["CHA"]) * battler.stats["EXP_mul"]
                 battler.exp += exp_gain
                 battler.tmp_exp_gain = 0
                 
@@ -371,18 +372,18 @@ class MapAction:
 
     def apply_skill_effects(self, target, skill_name, skill_level):
         """스킬 효과 적용"""
-        skill_info = SKILL_PROPERTIES[skill_name]
+        skill_info = SKILL_PROPERTIES[skill_name]['Active']
 
         # 버프 스킬인 경우
         if skill_info['skill_type'] == 'buff':
-            buff_duration = skill_info.get('duration', 1)
+            buff_duration = skill_info['effects'].get('duration', 1)
             # 퍼센트 효과 적용
-            if 'Buff_%' in skill_info:
-                effect = Effect(effect_type='buff',effects=skill_info['Buff_%'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration,is_percent=True)
+            if skill_info['effects'].get('stats_%',{}):
+                effect = Effect(effect_type='buff',effects=skill_info['effects']['stats_%'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration,is_percent=True)
                 self.effect_manager.add_effect(target, effect)
             # 고정값 효과 적용
-            if 'Buff' in skill_info:
-                effect = Effect(effect_type='buff',effects=skill_info['Buff'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration)
+            if skill_info['effects'].get('stats',{}):
+                effect = Effect(effect_type='buff',effects=skill_info['effects']['stats'][skill_level],source=f"buff_{skill_name}",remaining_turns=buff_duration)
                 self.effect_manager.add_effect(target, effect)
             # 버프 시각 효과
             self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),skill_info.get('animate', 'SHIELD'),wait=True)
@@ -391,47 +392,49 @@ class MapAction:
         if skill_info['skill_type'] == 'buff_temp':
             buff_duration = None
             # 퍼센트 효과 적용
-            if 'Buff_%' in skill_info:
-                effect = Effect(effect_type='buff_until_turn',effects=skill_info['Buff_%'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration,is_percent=True)
+            if skill_info['effects'].get('stats_%',{}):
+                effect = Effect(effect_type='buff_until_turn',effects=skill_info['effects']['stats_%'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration,is_percent=True)
                 self.effect_manager.add_effect(target, effect)
             # 고정값 효과 적용
-            if 'Buff' in skill_info:
-                effect = Effect(effect_type='buff_until_turn',effects=skill_info['Buff'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration)
+            if skill_info['effects'].get('stats',{}):
+                effect = Effect(effect_type='buff_until_turn',effects=skill_info['effects']['stats'][skill_level],source=f"buff_temp_{skill_name}",remaining_turns=buff_duration)
                 self.effect_manager.add_effect(target, effect)
             # 버프 시각 효과
             self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.centery),skill_info.get('animate', 'SHIELD'),wait=True)
             
-        elif skill_info.get('Heal'):
-            heal_amount = skill_info['Heal'][skill_level]+ self.selected_battler.stats["INT"]
+        elif skill_info['skill_type'] == 'heal':
+            heal_amount = skill_info['damage']['dmg_coef'][skill_level] + self.selected_battler.stats["INT"]
             target.Cur_HP = min(target.stats["Max_HP"], target.Cur_HP + heal_amount )
             self.animation_manager.create_animation((target.collision_rect.centerx, target.collision_rect.top - 10),'DAMAGE',value=heal_amount)
         # 데미지 스킬인 경우
         else:
-            target_magic_def = target.stats["INT"] * 0.2 + target.stats["RES"] * 0.4
-            level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
-            skill_multiplier = skill_info.get('Dmg_Coff', {}).get(skill_level, 0)
-            damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
-            self.Acted.append([target,'Magic_Damage',damage])
+            if skill_info['damage']['dmg_type'] == 'magical':
+                target_magic_def = target.stats["INT"] * 0.2 + target.stats["RES"] * 0.4
+                level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
+                skill_multiplier = skill_info['damage'].get('dmg_coef', {}).get(skill_level, 0)
+                damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+                self.Acted.append([target,'Magic_Damage',damage])
 
-            # 데미지 처리
-            self.Damage(self.selected_battler, target, damage, "Magic")
-            
-            # 상태이상 적용
-            if target.Cur_HP > 0 and 'Status_%' in skill_info:
-                status_chances = skill_info['Status_%'].get(skill_level, {})
-                for status, chance in status_chances.items():
-                    if random.random() * 100 < chance:
-                        effect = Effect(effect_type='status',effects=STATUS_PROPERTIES[status].get('Stat', {}),source=f"status_{status}",remaining_turns=STATUS_PROPERTIES[status]['duration'])
-                        if 'Stat_%' in STATUS_PROPERTIES[status]:
-                            effect_percent = Effect(effect_type='status',effects=STATUS_PROPERTIES[status]['Stat_%'],source=f"status_{status}_percent",remaining_turns=STATUS_PROPERTIES[status]['duration'],is_percent=True)
-                            target.effects.append(effect_percent)
-                        target.effects.append(effect)
-                self.effect_manager.update_effects(target)
+                # 데미지 처리
+                self.Damage(self.selected_battler, target, damage, "Magic")
+                
+                # 상태이상 적용
+                if target.Cur_HP > 0 and skill_info['effects'].get(skill_level, None):
+                    status_chances = skill_info['status'].get(skill_level, {})
+                    for status, chance in status_chances.items():
+                        if random.random() * 100 < chance:
+                            effect = Effect(effect_type='status',effects=STATUS_PROPERTIES[status].get('Stat', {}),source=f"status_{status}",remaining_turns=STATUS_PROPERTIES[status]['duration'])
+                            if 'Stat_%' in STATUS_PROPERTIES[status]:
+                                effect_percent = Effect(effect_type='status',effects=STATUS_PROPERTIES[status]['Stat_%'],source=f"status_{status}_percent",remaining_turns=STATUS_PROPERTIES[status]['duration'],is_percent=True)
+                                target.effects.append(effect_percent)
+                            target.effects.append(effect)
+                    self.effect_manager.update_effects(target)
 
     def check_magic_range(self, battler, skill):
-        skill_range = SKILL_PROPERTIES[skill].get('Range', {}).get(battler.skills[skill], 0)
+        skill_range = SKILL_PROPERTIES[skill]['Active'].get('range',{}).get(battler.skills[skill], 0)
+        
         facing = self.temp_facing
-        shape = SKILL_PROPERTIES[skill].get('shape', 'diamond')
+        shape = SKILL_PROPERTIES[skill]['Active'].get('range_type',None)
         attackable_pos = []
         if shape == 'diamond':
             diamond = [(dx, dy) for dx in range(-skill_range, skill_range + 1) for dy in range(-skill_range, skill_range + 1) if abs(dx) + abs(dy) <= skill_range]    
@@ -447,9 +450,28 @@ class MapAction:
             for i in range(1, skill_range + 1):
                 attackable_pos.append([battler.pos.x + dx * i ,battler.pos.y  + dy * i])
         # print(attackable_pos)
+        elif shape == 'cross':
+            cross = [(dx, dy) for dx in range(-skill_range, skill_range + 1) for dy in range(-skill_range, skill_range + 1) if dx == 0 or dy == 0]
+            for dx, dy in cross:
+                attackable_pos.append([battler.pos.x + dx ,battler.pos.y  + dy ])
+        elif shape == 'square':
+            square = [(dx, dy) for dx in range(-skill_range, skill_range + 1) for dy in range(-skill_range, skill_range + 1)]
+            for dx, dy in square:
+                attackable_pos.append([battler.pos.x + dx ,battler.pos.y  + dy ])
+        
         return attackable_pos
 
-    def highlight_tiles_set(self,pos_list,mode = 'Set', color = 'yellow'):
+    def check_magic_area(self,battler,skill,cursor):
+        skill_info = SKILL_PROPERTIES[skill]['Active']
+        area_range = skill_info['area']['range'].get(battler.skills[skill],0)
+        attackable_area = []
+        if skill_info['area']['type'] == 'diamond':
+            diamond = [(dx, dy) for dx in range(-area_range, area_range + 1) for dy in range(-area_range, area_range + 1) if abs(dx) + abs(dy) <= area_range]
+            for dx, dy in diamond:
+                attackable_area.append([cursor.pos.x + dx ,cursor.pos.y  + dy ])
+        return attackable_area
+
+    def highlight_tiles_set(self,pos_list,mode = 'Set', color = 'yellow',identifier = ''):
         if mode == 'Set':
             for pos in pos_list:
                 tile_image = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
@@ -458,20 +480,28 @@ class MapAction:
                 tile_image.set_alpha(128)
                 highlight_tile = Tile(pygame.math.Vector2(pos.x * TILESIZE, pos.y * TILESIZE),[self.visible_sprites],'area_display_tile')
                 highlight_tile.image = tile_image
-                highlight_tile.priority = highlight_tile.rect.topleft[1]
+                highlight_tile.identifier = identifier
+                if identifier == 'area':
+                    highlight_tile.priority = highlight_tile.rect.topleft[1] + 1
+                else:
+                    highlight_tile.priority = highlight_tile.rect.topleft[1]
                 self.highlight_tiles.append(highlight_tile)
                 # tile = Tile((pos[0] * TILESIZE, pos[1] * TILESIZE), [self.level.visible_sprites], 'attackable_tile')
         elif mode == 'Clear':
             if self.highlight_tiles:
-                # print(self.highlight_tiles)
-                for tile in self.highlight_tiles:
+                tiles_to_remove = [tile for tile in self.highlight_tiles if tile.identifier == identifier]
+                for tile in tiles_to_remove:
                     tile.kill()
-                self.highlight_tiles = []
+                    self.highlight_tiles.remove(tile)
+        elif mode == 'All_Clear':
+            for tile in self.highlight_tiles:
+                tile.kill()
+            self.highlight_tiles = []
         elif mode == 'Invisible':
             for tile in self.highlight_tiles:
                 tile.image.set_alpha(0)
 
-    def get_tiles_in_line(self, start_pos, end_pos, half_width=0.1):
+    def get_tiles_in_line(self, start_pos, end_pos):
         """
         두 위치 사이의 직선이 지나는 타일들을 순서대로 찾고,
         각 타일에서 다음 타일로의 이동이 가능한지 체크
@@ -551,7 +581,6 @@ class MapAction:
                 # 현재 타일이 막혀있으면 더 이상 진행하지 않음
                 if is_blocked:
                     break
-        
         # 마지막 타일 추가
         if path_tiles:
             last_x, last_y = path_tiles[-1]
@@ -653,7 +682,7 @@ class MapAction:
         # 경험치 계산을 위한 데이터
         kill_exp = CharacterDatabase.data[target.char_type].get('Kill_EXP', 0)
         max_hp = target.stats["Max_HP"]
-        cha_multiplier = attacker.stats["CHA_increase_multiplier"]
+        cha_multiplier = attacker.stats["CHA_increase_mul"]
         dmg_ratio = abs(damage) / max_hp
         
         # 데미지/회복 적용

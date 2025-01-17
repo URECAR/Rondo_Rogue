@@ -7,14 +7,14 @@ class MAP1:
         'Max_Y' : 25 * TILESIZE,   
     }
     spawns = {
-        # 'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
-        # 'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
+        'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
+        'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
         'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
-        # 'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
-        # 'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
-        'Army_Archer': {'Spawn': [12, 7], 'Level': 6, 'base_team': 'Enemy'},
-        # 'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
-        # 'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
+        'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
+        'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
+        'Army_Archer': {'Spawn': [9, 14], 'Level': 6, 'base_team': 'Enemy'},
+        'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
+        'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
     }
 class CharacterDatabase:
     data = {
@@ -61,13 +61,14 @@ class CharacterDatabase:
                 '불굴의 의지' : 1,
                 # '무념의 기보' : 1,
                 '체력 단련' : 3,
-                '아이스' : 1,
-                '테스트스킬1' : 1,
-                '테스트스킬2' : 1,
+                '아이스1' : 1,
+                '아이스2' : 1,
+                '번개 마법1' : 1,
+                '오버드라이브1' : 1,
                 '근접 방어 태세' : 1,
                 '테스트스킬3' : 1,
-                '군의학' : 1,
-                '테스트스킬5' : 1,
+                '힐링' : 1,
+                # '테스트스킬5' : 1,
                 '상시 근접 방어' : 1,
                 '저돌맹진' : 1,
                 '무념의 기보' : 3,
@@ -150,14 +151,14 @@ class CharacterDatabase:
             'skills': {
                 # '강력' : 1,
                 # 'Z.O.C': 1,
-                # '아이스': 1,
-                # '테스트스킬1': 1,
-                # '테스트스킬2': 1,
+                # '아이스1': 1,
+                # '아이스2': 1,
+                # '불 마법1': 1,
                 # '테스트스킬3': 1,
                 # '근접 방어 태세': 1,
                 # '테스트스킬5': 2,
                 # '신중함' : 3,
-                # '군의학' : 2,
+                # '힐링' : 2,
             },
         },
         'Player_wizard1': {
@@ -191,10 +192,10 @@ class CharacterDatabase:
             'skills': {
                 # '강력' : 1,
                 # 'Z.O.C': 1,
-                '아이스': 1,
-                '테스트스킬1': 1,
-                '테스트스킬5': 1,
-                '군의학' : 1,
+                '아이스1': 1,
+                # '아이스2': 1,
+                '불 마법1': 1,
+                '힐링' : 1,
                 '마력 운용' : 1,
             },
         },
@@ -224,9 +225,9 @@ class CharacterDatabase:
             'inventory': ['MP_Potion'],
             'skills': {
                 '임기응변': 2,
-                '아이스' : 2,
-                '테스트스킬1' : 1,
-                '테스트스킬2' : 1,
+                '아이스1' : 2,
+                '아이스2' : 1,
+                '불 마법1' : 1,
             },
             'hidden_stats': ['STR', 'Mov'],
             'Kill_EXP': 30,
@@ -338,7 +339,7 @@ class CharacterDatabase:
         if char_type not in CharacterDatabase.data:
             raise ValueError(f"Character type '{char_type}' not found in database")
         return CharacterDatabase.data[char_type]
-    @staticmethod
+    @staticmethod 
     def calculate_stats(char_type, level):
         if char_type not in CharacterDatabase.data:
             raise ValueError(f"Character type '{char_type}' not found")
@@ -378,18 +379,19 @@ class CharacterDatabase:
                 
                 base_stats[stat] += total_growth
         combat_stats = {
-            'Melee_attack_multiplier': 1.0,   'Melee_defense_multiplier': 1.0,
-            'Magic_attack_multiplier': 1.0,   'Magic_defense_multiplier': 1.0,
-            'Ranged_attack_multiplier': 1.0, 'Ranged_defense_multiplier': 1.0,
-            'Frontal_attack_multiplier': 1.0, 'Side_attack_multiplier': 1.0, 'Rear_attack_multiplier': 1.0,
+            'Melee_atk_mul': 1.0,   'Melee_def_mul': 1.0,
+            'Magic_atk_mul': 1.0,   'Magic_def_mul': 1.0,
+            'Ranged_atk_mul': 1.0, 'Ranged_def_mul': 1.0,
+            'Frontal_atk_mul': 1.0, 'Side_atk_mul': 1.0, 'Rear_atk_mul': 1.0,
+            'Frontal_def_mul': 1.0, 'Side_def_mul': 1.0, 'Rear_def_mul': 1.0,
             'HP_Regen': 0, 'MP_Regen': 0,
             'HP_Regen%': 0, 'MP_Regen%': 0,
             'Accuracy_rate': 1.0, 
-            'Critical_Chance' : 0, 'Critical_attack_multiplier' : 2.0,
+            'Critical_Chance' : 0, 'Critical_atk_mul' : 2.0,
             'Melee_evasion_chance': 0, 'Ranged_evasion_chance': 0,
-            'Counter_Chance': 0, 'Counter_attack_multiplier': 1.0, 'ZOC_Chance': 0, 'ZOC_Ignore_Chance' : 0,
-            'CHA_increase_multiplier' : 1.0,
-            'EXP_multiplier' : 1.0, 'Level_Up_Regen' : 0,
+            'Counter_Chance': 0, 'Counter_atk_mul': 1.0, 'ZOC_Chance': 0, 'ZOC_Ignore_Chance' : 0,
+            'CHA_increase_mul' : 1.0,
+            'EXP_mul' : 1.0, 'Level_Up_Regen' : 0,
         }
         base_stats.update(combat_stats)  # stats에 combat_stats 통합
         return base_stats
@@ -397,9 +399,9 @@ class CombatFormulas:
     def calculate_melee_damage(self,attacker, target, Damage_Bonus_multiplier, is_critical):
         """근접 공격 데미지 계산 공식"""
         base_damage = (attacker.stats['STR'] * 2 - target.stats['RES'])
-        multiplier = attacker.stats['Melee_attack_multiplier'] * target.stats['Melee_defense_multiplier'] * Damage_Bonus_multiplier
+        multiplier = attacker.stats['Melee_atk_mul'] * target.stats['Melee_def_mul'] * Damage_Bonus_multiplier
         if is_critical:
-            multiplier *= attacker.stats['Critical_attack_multiplier']
+            multiplier *= attacker.stats['Critical_atk_mul']
         Final_Damage = int(max(base_damage * multiplier, 0))
         self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
         return Final_Damage
@@ -407,9 +409,9 @@ class CombatFormulas:
     def calculate_range_damage(self, attacker, target, is_critical):
         """원거리 공격 데미지 계산 공식"""
         base_damage = (attacker.stats['STR'] + attacker.stats['DEX'] - target.stats['RES'])
-        multiplier = attacker.stats['Ranged_attack_multiplier'] * target.stats['Ranged_defense_multiplier']
+        multiplier = attacker.stats['Ranged_atk_mul'] * target.stats['Ranged_def_mul']
         if is_critical:
-            multiplier *= attacker.stats['Critical_attack_multiplier']
+            multiplier *= attacker.stats['Critical_atk_mul']
         Final_Damage = int(max(base_damage * multiplier, 0))
         self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
         return Final_Damage
@@ -417,11 +419,22 @@ class CombatFormulas:
     def calculate_magic_damage(self,attacker, defender, skill_power):
         """마법 공격 데미지 계산 공식"""
         base_damage = attacker.stats['INT'] * skill_power - defender.stats['RES']
-        multiplier = attacker.stats['Magic_attack_multiplier'] * defender.stats['Magic_defense_multiplier']
+        multiplier = attacker.stats['Magic_atk_mul'] * defender.stats['Magic_def_mul']
         Final_Damage = int(max(base_damage * multiplier, 0))
         self.map_action.Acted.append([defender,'Damage_Calculated', Final_Damage])
         return Final_Damage
 
+    def calculate_melee_counter_damage(self,attacker,target):
+        Counter_damage = int((target.stats['DEX'] + target.stats['STR'] - attacker.stats["RES"]) * target.stats["Melee_attack_multiplier"] * attacker.stats["Melee_defense_multiplier"] * target.stats["Counter_attack_multiplier"])
+        self.map_action.Acted.append([attacker,'Counter_Damage_Calculated', Counter_damage])
+        return Counter_damage
+
+    def calculate_heal(self,caster,target,skill_name,skill_level):
+        skill_info = SKILL_PROPERTIES[skill_name]
+        heal_amount = skill_info['Heal'][skill_level] + caster.stats["INT"]
+        self.map_action.Acted.append([target,'Heal_Calculated',heal_amount])
+        return heal_amount
+        
     def check_melee_counter(self, attacker, target, vurnerable):
         total_counter_chance = (target.stats["Counter_Chance"] + (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5 - vurnerable["counter"]) * 0.01
         self.map_action.Acted.append([target,'Counter_Check',total_counter_chance])
@@ -432,7 +445,7 @@ class CombatFormulas:
             return False 
 
     def check_melee_evasion(self, attacker, target, vurnerable):
-        total_hit_chance = (1 + ((attacker.stats["DEX"] - target.stats["DEX"]) * 2 + attacker.stats["Accuracy_rate"] - target.stats["Melee_evasion_chance"] + vurnerable["evasion"]) * 0.01)
+        total_hit_chance = attacker.stats["Accuracy_rate"]+( ((attacker.stats["DEX"] - target.stats["DEX"]) * 2  - target.stats["Melee_evasion_chance"] + vurnerable["evasion"]) * 0.01)
         self.map_action.Acted.append([target,'Hit_Check',total_hit_chance])
         if total_hit_chance < random.random():
             self.map_action.Acted.append([target,'Hit_Check','Evaded'])
@@ -481,14 +494,17 @@ class CombatFormulas:
         opposite_directions = {"left": "right", "right": "left", "up": "down"}
         hit_location = 'rear' if target.facing == attacker.facing else 'side' if target.facing != opposite_directions.get(attacker.facing) else 'front'
         hit_stats = {
-                    'front': {'multiplier': 1.0, 'vurnerable': {'zoc': 5, 'evasion': 0, 'counter': 0, 'critical': 0}},
-                    'side': {'multiplier': 1.1, 'vurnerable': {'zoc': 10, 'evasion': 5, 'counter': 5, 'critical': 4}},
-                    'rear': {'multiplier': 1.25, 'vurnerable': {'zoc': 15, 'evasion': 15, 'counter': 15, 'critical': 8}}
+                    'front': {'mul': 1.0 * attacker.stats['Frontal_atk_mul'] * target.stats['Frontal_def_mul'], 'vurnerable': {'zoc': 5, 'evasion': 0, 'counter': 0, 'critical': 0}},
+                    'side': {'mul': 1.1 * attacker.stats['Side_atk_mul'] * target.stats['Side_def_mul'], 'vurnerable': {'zoc': 10, 'evasion': 5, 'counter': 5, 'critical': 4}},
+                    'rear': {'mul': 1.25 * attacker.stats['Rear_atk_mul'] * target.stats['Rear_def_mul'], 'vurnerable': {'zoc': 15, 'evasion': 15, 'counter': 15, 'critical': 8}}
                 }
         bonuses = hit_stats[hit_location]
-        Damage_Bonus_multiplier = bonuses['multiplier']
+        Damage_Bonus_multiplier = bonuses['mul']
         vurnerable = bonuses['vurnerable']
         return Damage_Bonus_multiplier, vurnerable
+
+    def ZOC_status_check():
+        return 0.2
 ANIMATION_PROPERTIES = {
     'SLASH': {
         'frame_speed': 20,
@@ -554,6 +570,13 @@ ANIMATION_PROPERTIES = {
         'sound': 'SHIELD',
         'priority_offset': 64,
     },
+    'HOLY': {
+        'frame_speed': 15,
+        'folder_path': '../graphics/particles/aura',
+        'size': 1,
+        'anchor': 'center',
+        'priority_offset': 64,
+    },
     'AURA': {
         'frame_speed': 15,
         'folder_path': '../graphics/particles/aura',
@@ -561,8 +584,23 @@ ANIMATION_PROPERTIES = {
         'anchor': 'center',
         'priority_offset': 64,
     },
+    'HOLY_LIGHT': {
+        'frame_speed': 15,
+        'folder_path': '../graphics/particles/holy_light',
+        'size': 4,
+        'anchor': 'center',
+        'priority_offset': 64,
+        'offset':[0,-128]
+    },
+    'HOLY_CROSS': {
+        'frame_speed': 15,
+        'folder_path': '../graphics/particles/holy_cross',
+        'size': 1,
+        'anchor': 'center',
+        'priority_offset': 64,
+    },
     'ICE1': {
-        'frame_speed': 10,
+        'frame_speed': 20,
         'folder_path': '../graphics/particles/ice',
         'size': 1,
         'anchor': 'bottom',
@@ -595,10 +633,19 @@ ANIMATION_PROPERTIES = {
     },
     'MAGIC_CIRCLE': {
         'frame_speed': 20,
-        'folder_path': '../graphics/particles/magic_circle',
+        'folder_path': '../graphics/particles/magic_circle1',
         'size': 1.5,
         'anchor': 'bottom',
         'offset': [32,50],
+        'sound': 'MAGIC_CAST',
+        'priority_offset': -1,
+    },
+    'MAGIC_CIRCLE2': {
+        'frame_speed': 30,
+        'folder_path': '../graphics/particles/magic_circle2',
+        'size': 1,
+        'anchor': 'bottom',
+        'offset': [32,-8],
         'sound': 'MAGIC_CAST',
         'priority_offset': -1,
     },
@@ -692,64 +739,73 @@ ANIMATION_PROPERTIES = {
 }
 SKILL_PROPERTIES = {
     # 기본 스킬 템플릿
-    'SKILL_TEMPLATE': {
+    'SKILL_TEMPLATE_설명': {
         # 필수 속성
-        'Type': '',           # Passive / Active
-        'Description': '',    # 스킬 설명
+        'Type': '',           ## Passive / Active
+        'Description': '',    ## 스킬 설명 (
         'Style' : 'default',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
         # 패시브 스킬 속성
         'Passive': {
-            'effect_type': '',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
-            'condition': {        # conditional일 경우
+            'effect_type': '',    ## constant(상시 적용) / conditional(조건 적용) / support(응원 적용) 
+            'condition': {        # conditional일 경우 사용
                 'target': '',     # self / allies / enemies
                 'stat': '',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
                 'check_type': [], # ['equal', 'more', 'less'] 중 해당되는 것들
                 'threshold': {},  # 검사
                   
             },
-            'support': {          # support일 경우
+            'support': {          # support일 경우 사용
                 'target': '',          # owner(이 배틀러가 효과 받음) / passer(지나가는 배틀러가 효과 받음)
                 'effect_source': '',   # owner(이 배틀러의 스탯 사용) / passer(지나가는 배틀러의 스탯 사용)
                 'effect_type': '',     # buff(이동 동안만 유지) / immediate(즉시 적용)
                 'animation': '',       # 효과 받을 때의 애니메이션 타입
             },
-            'effects': {
-                'stats': {},     # 스탯 증가
-                'stats_%': {},   # 퍼센트 기반 스탯 증가
-                'status': {},    # 상태이상 부여
+            'effects': {        # 패시브 스탯이 존재할 경우 사용
+                'stats'  : {},     # 스탯 증가
+                'stats_%': {},
+                'status' : {},    # 상태이상 부여
             }
         },
     
         # 액티브 스킬 속성
         'Active': {
-            'target_type': '',   # single / multi / area
-            'shape': '',         # point / diamond / linear / cone
-            'range': {},         # 레벨별 사거리
-            'area': {},         # 레벨별 범위
+            'type': 'magic',        ## skill / magic
+            'skill_type' : '',      ## attack / support / heal / buff / buff_temp / debuff / summon
+            
+            # 범위 관련
+            'range_type' : '',      # diamond / linear / cross / square / ...
+            'range': {},            # 레벨별 사거리
+            'target_team': [],      # Self(자신) / Ally(자신을 제외한 아군) / Enemy(적군)
+            'target_option' : '',   # one / all / part
+            'area' : {},            # 타격 범위
             
             # 시전 관련
-            'mp_cost': {},      # 레벨별 MP 소모량
-            
+            'mp_cost': {},      # 레벨별 MP 소모량  (0일 경우 소거가능)
+    
             # 애니메이션 관련
             'cast_animation': '', # 시전 애니메이션
             'effect_animation': '', # 효과 애니메이션
-            'hit_animation': '',   # 타격 애니메이션
+            # 'hit_animation': '',   # 타격 애니메이션
             'Dmg_timing': 0,     # 데미지 적용 타이밍
-            
+            'animate_type' : '', # default(대상 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로), target(지정 타일에 1회)
+            'sequential' : {
+              'tick' : 0,
+            },    
             # 효과 관련
             'damage': {
-                'base': {},      # 레벨별 기본 데미지
-                'scaling': {     # 스탯 계수
-                    'STR': 0,
-                    'DEX': 0,
-                    'INT': 0
-                }
+                'dmg_type': '',  # physical / magical / heal / None
+                'dmg_coef': {},      # 레벨별 기본 데미지
             },
+            'damage_divide' : {
+                'enable' : False,
+                'damage_divided_count' : 0,  # 타격 시 데미지 분할 여부
+                'divide_tick' : 0,
+                },
             'effects': {
-                'stats': {},     # 고정 스탯 변화량
-                'stats_%': {},   # 퍼센트 기반 스탯 변화량
-                'status': {},    # 상태이상 및 확률
-                'duration': 0    # 지속시간 (턴)
+                'stats' : {},     # 고정 스탯 변화량
+                'stats_%' : {},   # 퍼센트 스탯 변화량
+                'status' : {},    # 상태이상 및 확률
+                'duration': 0,    # 지속시간 (턴)
             }
         }
     },
@@ -766,8 +822,6 @@ SKILL_PROPERTIES = {
                     2: {'ZOC_Chance': 70},
                     3: {'ZOC_Chance': 90},
                 },
-                'stats_%': {},
-                'status': {},
             },
         },
     },
@@ -783,8 +837,6 @@ SKILL_PROPERTIES = {
                     2: {'ZOC_Ignore_Chance': 60},
                     3: {'ZOC_Ignore_Chance': 75},
                 },
-                'stats_%': {},
-                'status': {},
             },
         },
     },
@@ -795,13 +847,11 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
                 'stats_%': {
-                    1: {'Melee_defense_multiplier': -40},
-                    2: {'Melee_defense_multiplier': -60},
-                    3: {'Melee_defense_multiplier': -70},
+                    1: {'Melee_def_mul': -40},
+                    2: {'Melee_def_mul': -60},
+                    3: {'Melee_def_mul': -70},
                 },
-                'status': {},
             },
         },
     },
@@ -817,8 +867,6 @@ SKILL_PROPERTIES = {
                     2: {'Counter_Chance': 10},
                     3: {'Counter_Chance': 15},
                 },
-                'stats_%': {},
-                'status': {},
             },
         },
     },
@@ -829,13 +877,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
                     1: {'STR': 10, 'RES': -10},
                     2: {'STR': 15, 'RES': -15},
                     3: {'STR': 20, 'RES': -20},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -846,13 +894,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
                     1: {'STR': 20},
                     2: {'STR': 40},
                     3: {'STR': 60},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -863,13 +911,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
                     1: {'RES': 20},
                     2: {'RES': 40},
                     3: {'RES': 60},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -881,12 +929,11 @@ SKILL_PROPERTIES = {
             'effect_type': 'constant',
             'effects': {
                 'stats': {
-                    1: {'Accuracy_rate': 10},
-                    2: {'Accuracy_rate': 20},
-                    3: {'Accuracy_rate': 30},
+                    1: {'Accuracy_rate': 0.1},
+                    2: {'Accuracy_rate': 0.2},
+                    3: {'Accuracy_rate': 0.3},
                 },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -902,8 +949,7 @@ SKILL_PROPERTIES = {
                     2: {'Mov': 2},
                     3: {'Mov': 3},
                 },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -914,13 +960,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
                     1: {'Max_HP': 10},
                     2: {'Max_HP': 20},
                     3: {'Max_HP': 30},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -931,13 +977,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
                     1: {'Max_MP': 15},
                     2: {'Max_MP': 30},
                     3: {'Max_MP': 50},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -948,13 +994,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
-                    1: {'Counter_attack_multiplier': 15},
-                    2: {'Counter_attack_multiplier': 30},
-                    3: {'Counter_attack_multiplier': 45},
+                    1: {'Counter_atk_mul': 15},
+                    2: {'Counter_atk_mul': 30},
+                    3: {'Counter_atk_mul': 45},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -965,13 +1011,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
-                    1: {'CHA_increase_multiplier': 15},
-                    2: {'CHA_increase_multiplier': 30},
-                    3: {'CHA_increase_multiplier': 45},
+                    1: {'CHA_increase_mul': 15},
+                    2: {'CHA_increase_mul': 30},
+                    3: {'CHA_increase_mul': 45},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -987,8 +1033,7 @@ SKILL_PROPERTIES = {
                     2: {'Melee_evasion_rate': 30},
                     3: {'Melee_evasion_rate': 45},
                     },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -1004,8 +1049,7 @@ SKILL_PROPERTIES = {
                     2: {'HP_Regen%': 6},
                     3: {'HP_Regen%': 9},
                 },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -1021,8 +1065,7 @@ SKILL_PROPERTIES = {
                     2: {'MP_Regen%': 6},
                     3: {'MP_Regen%': 9},
                 },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -1033,13 +1076,13 @@ SKILL_PROPERTIES = {
         'Passive': {
             'effect_type': 'constant',
             'effects': {
-                'stats': {},
+                
                 'stats_%': {
-                    1: {'EXP_multiplier': 10},
-                    2: {'EXP_multiplier': 20},
-                    3: {'EXP_multiplier': 3000},
+                    1: {'EXP_mul': 10},
+                    2: {'EXP_mul': 20},
+                    3: {'EXP_mul': 3000},
                 },
-                'status': {},
+                
             },
         },
     },
@@ -1055,8 +1098,7 @@ SKILL_PROPERTIES = {
                     2: {'Level_Up_Regen': 20},
                     3: {'Level_Up_Regen': 30},
                     },
-                'stats_%': {},
-                'status': {},
+                
             },
         },
     },
@@ -1079,8 +1121,7 @@ SKILL_PROPERTIES = {
                     2 : {'Cur_HP' : 20},
                     3 : {'Cur_HP' : 30},
                     },     
-                'stats_%': {},   
-                'status': {},   
+                   
             },
         },
     },    
@@ -1097,13 +1138,13 @@ SKILL_PROPERTIES = {
                 'animation': 'AURA',      
             },
             'effects': {
-                'stats': {},    
+                    
                 'stats_%': {   
                     1: {'STR' : 5},
                     2: {'STR' : 10},
                     3: {'STR' : 15},
                         },    
-                'status': {},   
+                   
             },
         },
     },
@@ -1125,8 +1166,7 @@ SKILL_PROPERTIES = {
                     2: {'Critical_Chance' : 10},
                     3: {'Critical_Chance' : 15},
                         },    
-                'stats_%': {},  
-                'status': {},   
+                   
             },
         },
     },
@@ -1144,12 +1184,11 @@ SKILL_PROPERTIES = {
             },
             'effects': {
                 'stats': {    
-                    1: {'Melee_attack_multiplier' : 0.05},
-                    2: {'Melee_attack_multiplier' : 0.1},
-                    3: {'Melee_attack_multiplier' : 0.15},
+                    1: {'Melee_atk_mul' : 0.05},
+                    2: {'Melee_atk_mul' : 0.1},
+                    3: {'Melee_atk_mul' : 0.15},
                         },    
-                'stats_%': {},  
-                'status': {},   
+                   
             },
         },
     },
@@ -1200,207 +1239,332 @@ SKILL_PROPERTIES = {
                   
             },
             'effects': {
-                'stats': {},     # 영구 스탯 증가
+                     # 영구 스탯 증가
                 'stats_%': {
                     1 : {'STR' : 10},
                     2 : {'STR' : 15},
                     3 : {'STR' : 20},
                     },   # 퍼센트 기반 스탯 증가
-                'status': {},    # 상태이상 부여
+                    # 상태이상 부여
             }
         },
     },
     # --- 버프 --- #
     '테스트스킬3': {
-        'Type': 'Active',
-        'style': 'default',
-        'Description' : '''사용 시, 다음 자신 페이즈까지 RES%를 올린다''',
-        'skill_type' : 'buff_temp',
-        'target' : ['Self'],
-        'casting': 'MAGIC_CIRCLE',
-        'animate_type'  : 'default',
-        'animate'   : 'AURA',
-        'duration'  : None,
-        'Buff_%': {
-            1: {'RES': 20},
-            2: {'RES': 40},
-            3: {'RES': 60},
-        },
+
+        'Type': 'Active',  
+        'Description': '사용 시, 다음 자신 페이즈까지 RES%를 올린다',  
+        'Style' : 'purple',  
+        'Active': {
+            'type': 'skill',   
+            'skill_type' : 'buff_temp',
+
+            'target_team': ['Self'], 
+            'target_option' : 'one',
+
+            'cast_animation': 'MAGIC_CIRCLE', 
+            'effect_animation': 'AURA', 
+            'animate_type' : 'default', 
+
+            'effects': {
+                'stats_%': {  
+                    1: {'RES': 20},
+                    2: {'RES': 40},
+                    3: {'RES': 60},
+                    },   
+                'duration': 3   
+            }
+        }
     },
     '근접 방어 태세': {
-        'Type': 'Active',
-        'style': 'default',
-        'Description' : '''사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다''',
-        'skill_type' : 'buff_temp',
-        'target' : ['Self'],
-        'casting': 'MAGIC_CIRCLE',
-        'animate_type'  : 'default',
-        'animate'   : 'AURA',
-        'duration'  : None,
-        'Buff': {
-            1: {'Melee_defense_multiplier' : -0.4},
-            2: {'Melee_defense_multiplier' : -0.6},
-            3: {'Melee_defense_multiplier' : -0.7},
-        },
-    },
-    # --- 액티브 - 매직 스킬 --- #
-    '아이스': {
-        'Type': 'Active',
-        'Style': 'magic',
-        'Description' : '{Range}칸 내 한 명에게 얼음 공격을 가한다',
-        'skill_type': 'Targeting',
-        'target' : ['Enemy','Ally'],
-        'shape' : 'diamond',
-        'target' : 'Self_Enemy',
-        'animate_type' : 'default',
-        'animate'   : 'ICE2',
-        'casting': 'MAGIC_CIRCLE',
-        'Dmg_timing' : 400,
-        'Dmg_Coff': {
-            1: 35,
-            2: 45,
-            3: 60
-        },
-        'Mana': {
-            1: 20,
-            2: 25,
-            3: 30,
-        },
-        'Range': {
-            1 : 5,
-            2 : 6,
-            3 : 7,
-        },
-        'Status_%' : {
-            1: {'동결' : 100,},    # 데미지 입을 시 10% 확률로 동결 상태이상
-            2: {'동결' : 15,},    
-            3: {'동결' : 20, '약화' : 5},    
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다',    # 스킬 설명
+        'Style' : 'purple',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'skill',        # skill / magic
+            'skill_type' : 'buff_temp',
+            'range_type' : '',      # diamond / linear / cross / square / ...
+            'range': {},            # 레벨별 사거리
+            'target_team': ['Self'],      # self / allies / enemies
+            'target_option' : 'one',   # one / all / part
+            'area' : {},            # 타격 범위
+            'mp_cost': {},      # 레벨별 MP 소모량
+            'cast_animation': 'MAGIC_CIRCLE', # 시전 애니메이션
+            'effect_animation': 'AURA', # 효과 애니메이션
+            # 'hit_animation': '',   # 타격 애니메이션
+            # 'Dmg_timing': 400,     # 데미지 적용 타이밍
+            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+             # 효과 관련
+            'effects': {
+                'stats': {     # 고정 스탯 변화량
+                    1: {'Melee_def_mul' : -0.4},
+                    2: {'Melee_def_mul' : -0.6},
+                    3: {'Melee_def_mul' : -0.7},
+                },
+
+                'duration': 3    # 지속시간 (턴)
+            },
         }
     },
-    '테스트스킬1': {
-        'Type': 'Active',
-        'Style': 'magic',
-        'Description' : '''전방 {Range}칸 내의 모두에게 얼음 공격을 가한다''',
-        'skill_type': 'Targeting_all',
-        'target' : ['Self_Enemy','Self_Ally'],
-        'shape' : 'linear',
-        'animate_type' : 'all_tiles',
-        'animate'   : 'ICE2',
-        'casting': 'MAGIC_CIRCLE',
-        'Dmg_timing' : 400,
-        'Dmg_Coff': {
-            1: 35,
-            2: 45,
-            3: 60
-        },
-        'Mana': {
-            1: 20,
-            2: 25,
-            3: 30,
-        },
-        'Range': {
-            1 : 5,
-            2 : 6,
-            3 : 7,
-        },
-        'Status_%' : {
-            1: {'동결' : 10},    # 데미지 입을 시 10% 확률로 동결 상태이상
-            2: {'동결' : 15},    
-            3: {'동결' : 20, '약화' : 10},    
-        },
-    },
-    '테스트스킬2': {
-        'Type': 'Active',
-        'Style': 'magic',
-        'Description' : '''{Range}칸 내 자신을 제외한 모두에게 번개를 소환한다''',
-        'skill_type': 'Targeting_all',
-        'target' : ['Self_Enemy','Self_Ally_except_Self'],
-        'shape' : 'diamond',
-        'animate_type' : 'default',
-        'animate'   : 'THUNDER1',
-        'casting': 'MAGIC_CIRCLE',
-        'Dmg_timing' : 400,
-        'Dmg_Coff': {
-            1: 40,
-            2: 50,
-            3: 60,
-        },
-        'Mana': {
-            1: 20,
-            2: 25,
-            3: 30,
+
+    # --- 액티브 - 매직 스킬 --- #
+    '아이스1': {
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '{range}칸 내 하나에게 얼음 공격을 가한다',    # 스킬 설명
+        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',        # skill / magic
+            'skill_type' : '',
+            # 범위 관련
+            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
+            'range': {1:4, 2:5, 3:6},            # 레벨별 사거리
+            'target_team': ['Ally','Enemy'],      # self / allies / enemies
+            'target_option' : 'one',   # one / all / part
+            
+            # 시전 관련
+            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
+    
+            # 애니메이션 관련
+            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
+            'effect_animation': 'ICE2', # 효과 애니메이션
+            # 'hit_animation': '',   # 타격 애니메이션
+            'Dmg_timing': 400,     # 데미지 적용 타이밍
+            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+             # 효과 관련
+            'damage': {
+                'dmg_type': 'magical',  # physical / magical / heal / None
+                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
             },
-        'Range': {
-            1 : 3,
-            2 : 4,
-            3 : 5,
-        },
-        'Status_%' : {
-            1: {'약화' : 50},    # 데미지 입을 시 10% 확률로 동결 상태이상
-            2: {'약화' : 55},    
-            3: {'약화' : 60},   
-        },
+            'effects': {
+                     # 고정 스탯 변화량
+                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},    # 상태이상 및 확률
+                'duration': 2    # 지속시간 (턴)
+            }
+        }
     },
-    '테스트스킬5': {
-        'Type': 'Active',
-        'Style': 'magic',
-        'Description': '''전방 {Range}칸 내의 모두에게 불 공격을 한다.''',
-        'skill_type': 'Targeting_all',
-        'shape': 'linear',
-        'target': ['Self_Enemy', 'Self_Ally'],
-        'animate_type': 'sequentially',
-        'animate': 'FIRE1',
-        'casting': 'MAGIC_CIRCLE',
-        'sequence_delay': 0.15,  # 각 타일 간 딜레이(초)
-        'Dmg_timing': 0.4,  # 애니메이션과 동시에 데미지
-        'Dmg_Coff': {
-            1: 35,
-            2: 45,
-            3: 60
-        },
-        'Mana': {
-            1: 20,
-            2: 25,
-            3: 30,
-        },
-        'Range': {
-            1: 5,
-            2: 6,
-            3: 7,
-        },
-        'Status_%': {
-            1: {'약화': 20},
-            2: {'약화': 25},
-            3: {'약화': 30},
-        },
+    '아이스2': {
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '전방 {range}칸 내의 모두에게 얼음 공격을 가한다',    # 스킬 설명
+        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',        # skill / magic
+            'skill_type' : '',
+            # 범위 관련
+            'range_type' : 'linear',      # diamond / linear / cross / square / ...
+            'range': {1:5, 2:6, 3:7},            # 레벨별 사거리
+            'target_team': ['Ally','Enemy'],      # self / Ally / Enemy
+            'target_option' : 'all',   # one / all / part
+            'area' : {},            # 타격 범위
+            
+            # 시전 관련
+            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
+    
+            # 애니메이션 관련
+            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
+            'effect_animation': 'ICE2', # 효과 애니메이션
+            # 'hit_animation': '',   # 타격 애니메이션
+            'Dmg_timing': 400,     # 데미지 적용 타이밍
+            'animate_type' : 'all_tiles', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+             # 효과 관련
+            'damage': {
+                'dmg_type': 'magical',  # physical / magical / heal / None
+                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
+            },
+            'effects': {
+                     # 고정 스탯 변화량
+                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},    # 상태이상 및 확률
+                'duration': 2    # 지속시간 (턴)
+            }
+        }
+    },
+    '번개 마법1': {
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '{range}칸 내 자신을 제외한 모두에게 번개를 소환한다',    # 스킬 설명
+        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',        # skill / magic
+            'skill_type' : '',
+            # 범위 관련
+            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
+            'range': {1:3, 2:4, 3:5},            # 레벨별 사거리
+            'target_team': ['Ally','Enemy'],      # self / Ally / Enemy
+            'target_option' : 'all',   # one / all / part
+            'area' : {},            # 타격 범위
+            
+            # 시전 관련
+            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
+    
+            # 애니메이션 관련
+            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
+            'effect_animation': 'THUNDER1', # 효과 애니메이션
+            # 'hit_animation': '',   # 타격 애니메이션
+            'Dmg_timing': 400,     # 데미지 적용 타이밍
+            'animate_type' : 'default', # default(타겟의 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+             # 효과 관련
+            'damage': {
+                'dmg_type': 'magical',  # physical / magical / heal / None
+                'dmg_coef': {1:40, 2:50, 3:60},      # 레벨별 기본 데미지
+            },
+            'effects': {
+                     # 고정 스탯 변화량
+                'status': {1: {'약화' : 30}, 2: {'약화' : 40}, 3: {'약화' : 50},},    # 상태이상 및 확률
+                'duration': 2    # 지속시간 (턴)
+            }
+        }
+    },
+    '불 마법1': {
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '전방 {range}칸 내의 모두에게 불 공격을 한다.',    # 스킬 설명
+        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',
+            'skill_type' : 'attack',     
+            
+            # 범위 관련
+            'range_type' : 'linear',      # diamond / linear / cross / square / ...
+            'range': {            
+                1: 5,
+                2: 6,
+                3: 7,
+                },            # 레벨별 사거리
+            'target_team': ['Ally','Enemy'],      # Self(자신) / Ally(자신을 제외한 아군) / Enemy(적군)
+            'target_option' : 'all',   # one / all / part
+            'mp_cost': {            
+                1: 20,
+                2: 25,
+                3: 30,
+                },
+    
+            # 애니메이션 관련
+            'cast_animation': 'MAGIC_CIRCLE', # 시전 애니메이션
+            'effect_animation': 'FIRE1', # 효과 애니메이션
+            'Dmg_timing': 0.4,     # 데미지 적용 타이밍
+            'animate_type' : 'sequential', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+            'sequential' : {
+              'tick' : 0.15,
+            },    
+            # 효과 관련
+            'damage': {
+                'dmg_type': 'magical',  # physical / magical / heal / None
+                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
+            },
+            'damage_divide' : {
+                'enable' : False,
+                'damage_divided_count' : 0,  # 타격 시 데미지 분할 여부
+                'divide_tick' : 0,
+                },
+            'effects': {
+                     # 고정 스탯 변화량
+                    # 상태이상 및 확률
+                'duration': 0    # 지속시간 (턴)
+            }
+        }
+    },
+
+    '오버드라이브1': {
+        # 필수 속성
+        'Type': 'Active',  
+        'Description': '{range}칸 내의 2칸 이내 지역에 빛 공격을 한다.',    # 스킬 설명
+        'Style' : 'red',   
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',
+            'skill_type' : 'attack',     
+            
+            # 범위 관련
+            'range_type' : 'diamond',  
+            'range': {            
+                1: 4,
+                2: 5,
+                3: 6,
+                },   
+            'area' : {
+                'type' : 'diamond',
+                'range' : {
+                    1: 2,
+                    2: 2,
+                    3: 2},
+            },
+            'target_team': ['Self','Ally','Enemy'], 
+            'target_option' : 'part', 
+            'mp_cost': {            
+                1: 20,
+                2: 25,
+                3: 30,
+                },
+            'cast_animation': 'MAGIC_CIRCLE',
+            'effect_animation': 'HOLY_LIGHT',
+            'Dmg_timing': 1200,
+            'animate_type' : 'target', 
+            'damage': {
+                'dmg_type': 'magical',
+                'dmg_coef': {1:60, 2:80, 3:110},
+            },
+            'effects': {
+                  
+                 
+                'duration': 0 
+            }
+        }
     },
     # --- 액티브 - 서포트 스킬 --- #
-    '군의학': {
-        'Type': 'Active',
-        'Style': 'support',
-        'Description': '''의술을 사용하여 아군 한 명의 체력을 크게 회복시킨다.''',
-        'skill_type': 'Targeting',  # 단일 타겟팅
-        'shape' : 'diamond',
-        'target': ['Self_Ally'],  # 자신을 포함한 모든 아군 지정 가능
-        'casting': 'MAGIC_CIRCLE',
-        'animate': 'HEAL',
-        'Dmg_timing': 500,
-        'Heal': {  # 회복량
-            1: 25,
-            2: 40,
-            3: 60,
-        },
-        'Mana': {  # 마나 소모량
-            1: 20,
-            2: 25,
-            3: 30,
-        },
-        'Range': {  # 범위
-            1: 2,
-            2: 3,
-            3: 3
+    '힐링': {
+        # 필수 속성
+        'Type': 'Active',           # Passive / Active
+        'Description': '아군 한 명의 체력을 회복시킨다.',    # 스킬 설명
+        'Style' : 'support',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        # 액티브 스킬 속성
+        'Active': {
+            'type': 'magic',        # skill / magic
+            'skill_type' : 'heal',      # attack / support / heal / buff / buff_temp / debuff / summon
+            
+            # 범위 관련
+            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
+            'range': {            
+                1: 2,
+                2: 3,
+                3: 3
+                },            # 레벨별 사거리
+            'target_team': ['Ally'],      # Self(자신) / Ally(자신을 제외한 아군) / Enemy(적군)
+            'target_option' : 'one',   # one / all / part
+            # 시전 관련
+            'mp_cost': {
+                1: 30,
+                2: 40,
+                3: 50
+                },
+    
+            # 애니메이션 관련
+            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
+            'effect_animation': 'HOLY_CROSS', # 효과 애니메이션
+            'Dmg_timing': 500,     # 데미지 적용 타이밍
+            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+            'damage': {
+                'dmg_type': 'heal',  # physical / magical / heal / None
+                'dmg_coef': {
+                    1:25,
+                    2:40,
+                    3:60
+                    },
+                },
+            'effects': {
+                     # 고정 스탯 변화량
+                    # 상태이상 및 확률
+                'duration': 0    # 지속시간 (턴)
+            }
         }
-    }
+    },
+
 }
 STATUS_PROPERTIES = {
     '여기어디': {
@@ -1493,11 +1657,11 @@ EQUIP_PROPERTIES = {
     },
     '희망' : {
         'Description' : '''CHA가 20 증가하며, 주는 근접,마법,원거리 데미지 피해량이 10% 증가한다.''',
-        'STAT' : {'CHA' : 20, 'Melee_attack_multiplier' : 10, 'Range_attack_multiplier' : 10, 'Magic_attack_multiplier' : 10,},
+        'STAT' : {'CHA' : 20, 'Melee_atk_mul' : 10, 'Range_atk_mul' : 10, 'Magic_atk_mul' : 10,},
     },
     '절망' : {
         'Description' : '''CHA가 20 감소하며, 주는 근접,마법,원거리 데미지 피해량이 20% 증가한다.''',
-        'STAT' : {'CHA' : -20, 'Melee_attack_multiplier' : 20, 'Range_attack_multiplier' : 20, 'Magic_attack_multiplier' : 20,},
+        'STAT' : {'CHA' : -20, 'Melee_atk_mul' : 20, 'Range_atk_mul' : 20, 'Magic_atk_mul' : 20,},
     },
     '강아지 이모티콘' : {
         'Description' : '''반격률이 20% 증가한다.''',

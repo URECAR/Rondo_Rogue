@@ -319,7 +319,7 @@ class Player_Menu_State(State):
             self.map_action.target = skill_info.get('target', [])
             self.map_action.skill = selected_skill
             self.map_action.skill_shape = skill_info.get('shape', None)
-            self.map_action.skill_type = skill_info.get('skill_type', None)
+            self.map_action.target_option = skill_info.get('target_option', None)
             self.map_action.input_manager.reset_mouse_state()  # 배틀러 선택 후 마우스 상태 초기화
             return 'select_magic_target'
             
@@ -520,8 +520,7 @@ class Interact_State(State):
 
                 # ZOC 상태이상 적용
                 status_chances = 0.2
-                status_remaining_turns = 3
-                self.map_action.Acted.append([self.map_action.selected_battler,['status_여기어디_Check',status_chances]])
+                self.map_action.Acted.append([self.map_action.selected_battler,['status_여기어디_Check',CombatFormulas.ZOC_status_check()]])
                 status = '여기어디'
                 if random.random() < status_chances:
                     effect = Effect(effect_type='status',effects=STATUS_PROPERTIES[status].get('Stat', {}),source=f"status_{status}",remaining_turns=STATUS_PROPERTIES[status]['duration'])
@@ -538,13 +537,7 @@ class Interact_State(State):
 
             elif self.substate == 'melee_counter1' and self.map_action.update_time < pygame.time.get_ticks():
                 # 반격 데미지 계산
-                counter_damage = int((
-                    self.map_action.target_battler.stats['DEX'] + 
-                    self.map_action.target_battler.stats['STR'] - 
-                    self.map_action.selected_battler.stats["RES"]
-                ) * self.map_action.target_battler.stats["Melee_attack_multiplier"] * 
-                    self.map_action.selected_battler.stats["Melee_defense_multiplier"] * 
-                    self.map_action.target_battler.stats["Counter_attack_multiplier"])
+                counter_damage = CombatFormulas.calculate_melee_counter_damage(self,self.map_action.selected_battler, self.map_action.target_battler)
 
                 # 애니메이션 생성
                 self.map_action.animation_manager.create_animation(
@@ -663,17 +656,18 @@ class Interact_State(State):
                 attacker = self.map_action.selected_battler
                 skill_name = self.map_action.skill
                 skill_level = attacker.skills[skill_name]
-                
+                skill_info = SKILL_PROPERTIES[skill_name]['Active']
                 # MP 소모
-                skill_mana = SKILL_PROPERTIES[skill_name].get('Mana', {}).get(skill_level, 0)
+                skill_mana = skill_info.get('mp_cost',{}).get(skill_level, 0)
                 attacker.Cur_MP -= skill_mana
 
                 # 시전한 게 스킬인지 마법인지 확인
-                if SKILL_PROPERTIES[skill_name].get('style','skill') == 'magic':
+                if skill_info['type'] == 'magic':
                     self.map_action.Acted.append([None,'Magic_Casting',[skill_name,skill_level]])
-                else:
+                elif skill_info['type'] == 'skill':
                     self.map_action.Acted.append([None,'Use_Skill',[skill_name,skill_level]])
-                
+                else:
+                    print(f'Error: 타입 인식 실패 : {skill_info["type"]}')
                 # 방향 설정 및 캐스팅 시작
                 attacker.update_facing_direction(self.level.cursor.pos - attacker.pos)
                 attacker.actlist.append('casting')
@@ -688,8 +682,8 @@ class Interact_State(State):
                 self.map_action.visible_sprites.zoom_to_battler(attacker)
 
                 # 캐스팅 애니메이션
-                if SKILL_PROPERTIES[skill_name].get('casting', None):
-                    self.map_action.animation_manager.create_animation((attacker.return_tile_location()[0],attacker.return_tile_location()[1] - TILESIZE),SKILL_PROPERTIES[skill_name]['casting'],wait=True)
+                if skill_info['cast_animation']:
+                    self.map_action.animation_manager.create_animation((attacker.return_tile_location()[0],attacker.return_tile_location()[1] - TILESIZE),skill_info['cast_animation'],wait=True)
 
                 self.substate = 'skill1'
 
@@ -702,10 +696,10 @@ class Interact_State(State):
                     first_target = targets[0]
                     self.level.visible_sprites.focus_on_target(first_target)
                 
-                skill_info = SKILL_PROPERTIES[self.map_action.skill]
-                animate_type = skill_info.get('animate_type', 'default')
+                skill_info = SKILL_PROPERTIES[self.map_action.skill]['Active']
+                animate_type = skill_info.get('animate_type', None)
                 
-                if animate_type == 'sequentially':
+                if animate_type == 'sequential':
                     # 타일 위치들을 거리 순으로 정렬
                     tile_positions = [tile for tile in self.map_action.highlight_tiles]
                     tile_positions.sort(key=lambda tile: (
@@ -715,26 +709,30 @@ class Interact_State(State):
                     
                     # 첫 번째 타일에 대한 애니메이션
                     if tile_positions:
-                        self.map_action.animation_manager.create_animation(tile_positions[0],skill_info.get('animate', 'SLASH'),wait=True)
+                        self.map_action.animation_manager.create_animation(tile_positions[0],skill_info.get('effect_animation', 'SLASH'),wait=True)
                         # 첫 번째 타일에 있는 대상에게 데미지
                         for target in targets:
                             if target.pos == tile_positions[0].pos:
                                 self.map_action.apply_skill_effects(target,self.map_action.skill,self.map_action.selected_battler.skills[self.map_action.skill]) 
                     self.sequence_tiles = tile_positions[1:]
-                    self.sequence_delay = skill_info.get('sequence_delay', 0.3)
+                    self.sequence_delay = skill_info['sequential']['tick']
                     self.next_sequence_time = pygame.time.get_ticks() + self.sequence_delay * 1000
                     return 'interact', 'skill_sequence'
                     
                 elif animate_type == 'all_tiles':
                     # 모든 타일에 동시에 애니메이션
                     for tile in self.map_action.highlight_tiles:
-                        self.map_action.animation_manager.create_animation((tile.rect.midtop[0], tile.rect.midtop[1]),skill_info.get('animate', 'SLASH'),wait=True)
+                        self.map_action.animation_manager.create_animation((tile.rect.midtop[0], tile.rect.midtop[1]),skill_info.get('effect_animation', 'SLASH'),wait=True)
                         
-                else:  # default나 battler 타입
+                elif animate_type == 'default':  # default나 battler 타입
                     # 각 대상별로 애니메이션
                     for target in targets:
-                        self.map_action.animation_manager.create_animation((target.collision_rect.midtop[0], target.collision_rect.midtop[1]),skill_info.get('animate', 'SLASH'),wait=True)
-                        
+                        self.map_action.animation_manager.create_animation((target.collision_rect.midtop[0], target.collision_rect.midtop[1]),skill_info.get('effect_animation', 'SLASH'),wait=True)
+                elif animate_type == 'target':
+                    self.map_action.animation_manager.create_animation(self.map_action.animate_pos,skill_info.get('effect_animation', 'SLASH'),wait=True)
+                else:
+                    print(f'Error: 애니메이션 타입 인식 실패 : {animate_type}')
+                    
                 self.TEMP_wait_time = pygame.time.get_ticks() + skill_info.get('Dmg_timing', 0)
                 return 'interact', 'skill2'
                 
@@ -755,8 +753,9 @@ class Interact_State(State):
             elif self.substate == 'skill_sequence':
                 if pygame.time.get_ticks() >= self.next_sequence_time and self.sequence_tiles:
                     # 다음 타일 애니메이션 생성
+                    skill_info = SKILL_PROPERTIES[self.map_action.skill]['Active']
                     tile = self.sequence_tiles.pop(0)
-                    self.map_action.animation_manager.create_animation(tile,SKILL_PROPERTIES[self.map_action.skill].get('animate', 'SLASH'),wait=True)
+                    self.map_action.animation_manager.create_animation(tile,skill_info.get('effect_animation', 'SLASH'),wait=True)
                     
                     # 해당 타일에 있는 타겟에게 데미지
                     targets = (self.map_action.target_battler 
@@ -817,11 +816,6 @@ class Interact_State(State):
             elif self.substate == 'using_item4' and self.map_action.update_time < pygame.time.get_ticks():
                 self.level.ui.current_item_menu_index = 0
                 self.map_action.endturn()
-
-
-
-
-
 class Select_Magic_Target_State(State):
     def enter(self):
         self.map_action.temp_facing = self.map_action.selected_battler.facing  # 임시 방향 초기화
@@ -829,8 +823,12 @@ class Select_Magic_Target_State(State):
         self.level.cursor.move_lock = False
         self.level.cursor.SW_select = False
         self.level.cursor.select_lock = True
+        self.map_action.highlight_tiles_set(None,mode = 'All_Clear')
         self.map_action.highlight_tiles_set([pygame.math.Vector2(x,y)for x , y in attackable_pos], mode = 'Set')
-        
+        # 자신에게 시전이면 즉시 시전.
+        if ['Self'] == SKILL_PROPERTIES[self.map_action.skill]['Active']['target_team']:
+            self.map_action.target_battler = self.map_action.selected_battler
+            self.map_action.current_dialog = ConfirmationDialog("사용하시겠습니까?")
     def update(self):
         # 대화상자 처리
         if self.map_action.current_dialog:
@@ -847,21 +845,15 @@ class Select_Magic_Target_State(State):
                 else:
                     self.level.cursor.move_lock = False  # 커서 이동 잠금 해제
                     self.map_action.target_battler = None
-                    if ['Self'] == SKILL_PROPERTIES[self.map_action.skill]['target']:
+                    if ['Self'] == SKILL_PROPERTIES[self.map_action.skill]['Active']['target_team']:
                         self.map_action.current_dialog = None
                         self.map_action.target_battler = None
                         self.level.ui.current_main_menu = 'skill'
                         return 'player_menu'
                 self.map_action.current_dialog = None
             return
-        
-        # 자신에게 시전이면 즉시 시전.
-        if ['Self'] == SKILL_PROPERTIES[self.map_action.skill]['target']:
-            self.map_action.target_battler = self.map_action.selected_battler
-            self.map_action.current_dialog = ConfirmationDialog("사용하시겠습니까?")
-
         # 직선형 스킬일 때 방향 변경 처리
-        if SKILL_PROPERTIES[self.map_action.skill].get('shape') == 'linear':
+        if SKILL_PROPERTIES[self.map_action.skill]['Active'].get('range_type') == 'linear':
             new_facing = None
             cursor_x = self.level.cursor.pos.x
             cursor_y = self.level.cursor.pos.y
@@ -879,11 +871,15 @@ class Select_Magic_Target_State(State):
                 self.map_action.highlight_tiles_set(None,mode='Clear')
                 attackable_pos = self.map_action.check_magic_range(self.map_action.selected_battler,self.map_action.skill)
                 self.map_action.highlight_tiles_set([pygame.math.Vector2(x,y)for x , y in attackable_pos], mode = 'Set')
-
+        elif SKILL_PROPERTIES[self.map_action.skill]['Active'].get('target_option') == 'part':
+            attackable_area = self.map_action.check_magic_area(self.map_action.selected_battler,self.map_action.skill,self.cursor)
+            self.map_action.highlight_tiles_set(None,mode = 'Clear',identifier = 'area')
+            self.map_action.highlight_tiles_set([pygame.math.Vector2(x,y)for x , y in attackable_area], mode = 'Set',identifier = 'area', color = 'red')
+        
         if self.map_action.input_manager.is_just_pressed('Cancel'):
             self.map_action.selected_battler.facing = self.map_action.selected_battler.facing  # 원래 방향 복원
             self.level.ui.current_main_menu = 'skill'
-            self.map_action.highlight_tiles_set(None,mode='Clear')
+            self.map_action.highlight_tiles_set(None,mode='All_Clear')
             self.level.visible_sprites.focus_on_target(self.map_action.selected_battler,cursor_obj=self.level.cursor)
             self.level.cursor.move_lock = True
             self.level.cursor.SW_select = True
@@ -894,28 +890,34 @@ class Select_Magic_Target_State(State):
         if (self.map_action.input_manager.is_just_pressed('Select') or self.level.cursor.clicked_self):
             if self.level.cursor.clicked_self:
                 self.level.cursor.clicked_self = False
-            skill_type = SKILL_PROPERTIES[self.map_action.skill].get('skill_type', {})
-            skill_targets = SKILL_PROPERTIES[self.map_action.skill]['target']
+            target_option = SKILL_PROPERTIES[self.map_action.skill]['Active'].get('target_option', {})
             # 강조된 타일 위에 커서가 올려졌을 때 조건문 실행
-            if any(self.level.cursor.pos == pygame.math.Vector2(attackable_tile.rect.topleft[0] // TILESIZE, attackable_tile.rect.topleft[1] // TILESIZE) for attackable_tile in self.map_action.highlight_tiles):
+            if any(self.level.cursor.pos == pygame.math.Vector2(attackable_tile.rect.topleft[0] // TILESIZE, attackable_tile.rect.topleft[1] // TILESIZE) for attackable_tile in self.map_action.highlight_tiles if getattr(attackable_tile, 'identifier', '') == ''):
                 # 단일 타게팅 
-                if skill_type == 'Targeting':
+                if target_option == 'one':      # 범위 내 단일 타게팅
                     self.map_action.target_battler = None
                     for battler in self.level.battler_sprites:
                         if self.level.cursor.pos == battler.pos and istarget(self.map_action.skill,self.map_action.selected_battler,battler):
                             self.map_action.target_battler = battler
                             break
                 # 범위 타게팅 수정
-                elif skill_type == 'Targeting_all':
+                elif target_option == 'all':    # 범위 내 모든 배틀러 타게팅
                     self.map_action.target_battler = []
                     skill_area = [tile.pos for tile in self.map_action.highlight_tiles]
                     for battler in self.level.battler_sprites:
                         if battler.pos in skill_area:
                             if istarget(self.map_action.skill,self.map_action.selected_battler,battler):
                                 self.map_action.target_battler.append(battler)
-
+                elif target_option == 'part':   # 범위 내 일부 타게팅
+                    self.map_action.target_battler = []
+                    area = [tile.pos for tile in self.map_action.highlight_tiles if tile.identifier == 'area']
+                    for battler in self.level.battler_sprites:
+                        if battler.pos in area:
+                            if istarget(self.map_action.skill,self.map_action.selected_battler,battler):
+                                self.map_action.target_battler.append(battler)
                 # 타겟이 있으면 확인 대화상자 표시
                 if self.map_action.target_battler:
+                    self.map_action.animate_pos = self.cursor.rect.center
                     self.level.cursor.move_lock = True
                     self.level.cursor.select_lock = True
                     self.map_action.current_dialog = ConfirmationDialog("사용하시겠습니까?")
@@ -953,10 +955,6 @@ class Select_Range_Target_State(State):
 
             # 캐릭터의 공격 범위 가져오기
 
-        
-        # 커서 위치까지의 경로 타일 계산
-        line_tiles = self.map_action.get_tiles_in_line(self.map_action.selected_battler.pos,self.level.cursor.pos)
-        
         # 취소 처리
         if self.map_action.input_manager.is_just_pressed('Cancel'):
             # 모든 타일 제거

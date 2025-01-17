@@ -499,7 +499,7 @@ class EffectManager:
 
         # multiplier 관련 스탯은 최소값 0.2로 보정
         for stat in battler.stats:
-            if 'multiplier' in stat.lower():
+            if 'mul' in stat.lower():
                 if battler.stats[stat] < 0.2:
                     print_if(self.SW_debug,f"Correcting {stat} from {battler.stats[stat]} to 0.2 (minimum)")
                     battler.stats[stat] = 0.2

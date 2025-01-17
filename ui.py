@@ -416,7 +416,7 @@ class UI():
         description = skill_info['Description'].strip()
         format_dict = {}
         
-        for key, value in skill_info.items():
+        for key, value in skill_info['Active'].items():
             if isinstance(value, dict) and skill_level in value:
                 if isinstance(value[skill_level], dict):
                     format_dict.update(value[skill_level])
@@ -520,11 +520,11 @@ class UI():
 
         # 스킬 목록 표시
         for i, skill in enumerate(visible_skills_list):
-            skill_info = SKILL_PROPERTIES[skill]
+            skill_info = SKILL_PROPERTIES[skill]['Active']
             skill_level = selected_battler.skills[skill]
             
             # 마나 체크
-            mana_cost = skill_info.get('Mana', {}).get(skill_level, 0)
+            mana_cost = skill_info.get('mp_cost', {}).get(skill_level, 0)
             has_enough_mana = selected_battler.Cur_MP >= mana_cost
             
             # 스킬 항목 배경
@@ -536,7 +536,7 @@ class UI():
             )
 
             # 스타일 적용
-            style_name = skill_info.get('Style', 'default')
+            style_name = SKILL_PROPERTIES[skill].get('Style', 'default')
             style = SKILL_STYLES[style_name]
             
             is_selected = (i + scroll_offset == selected_skill_index)
@@ -569,7 +569,7 @@ class UI():
             text_surface.blit(name_text, name_rect)
 
             # 마나 비용 표시
-            if 'Mana' in skill_info:
+            if skill_info.get('mp_cost'):
                 mana_cost = f"MP {mana_cost}"
                 mana_text = self.font.render(mana_cost, True, text_color)
                 mana_rect = mana_text.get_rect(midright=(skill_menu_width - 30, MENU_PANEL_HEIGHT // 2))
@@ -1018,6 +1018,11 @@ class UI():
                     threshold = skill_info['Passive']['condition'].get('threshold', {}).get(skill_level)
                     if threshold is not None:
                         format_dict['threshold'] = threshold
+            elif skill_info.get('Type') == 'Active' and 'Active' in skill_info:
+                active_info = skill_info['Active']
+                # Add range value to format_dict if it exists
+                if 'range' in active_info:
+                    format_dict['range'] = active_info['range'].get(skill_level, 0)
             
             # Handle regular skill properties
             for key, value in skill_info.items():
@@ -1206,8 +1211,8 @@ class UI():
                 if self.input_manager.is_left_click():
                     if self.current_skill_menu_index == i:
                         skill_level = selected_battler.skills[skill]
-                        if 'Mana' in SKILL_PROPERTIES[skill]:
-                            mana_cost = SKILL_PROPERTIES[skill]['Mana'][skill_level]
+                        if 'mp_cost' in SKILL_PROPERTIES[skill]['Active']:
+                            mana_cost = SKILL_PROPERTIES[skill]['Active']['mp_cost'][skill_level]
                             if selected_battler.Cur_MP < mana_cost:
                                 return None
                         self.current_main_menu = self.previous_main_menu = self.neutral_main_menu = 'skill_target'
@@ -1228,8 +1233,8 @@ class UI():
             self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_SELECT'])
             selected_skill = active_skills[self.current_skill_menu_index]
             skill_level = selected_battler.skills[selected_skill]
-            if 'Mana' in SKILL_PROPERTIES[selected_skill]:
-                mana_cost = SKILL_PROPERTIES[selected_skill]['Mana'][skill_level]
+            mana_cost = SKILL_PROPERTIES[selected_skill]['Active'].get('mp_cost',{}).get(skill_level)
+            if mana_cost:
                 if selected_battler.Cur_MP < mana_cost:
                     return None
             self.current_main_menu = self.previous_main_menu = self.neutral_main_menu = 'skill_target'

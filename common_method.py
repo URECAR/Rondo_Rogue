@@ -17,10 +17,11 @@ def print_if(SW, *args):
         print(*args)
         
 def istarget(skill,selected_battler, battler,facing=None):
-    skill_targets = SKILL_PROPERTIES[skill]['target']
-    return (('Self_Ally' in skill_targets and (battler.team == selected_battler.team)) or
-        ('Self_Ally_except_Self' in skill_targets and (battler.team == selected_battler.team) and battler != selected_battler) or
-        ('Self_Enemy' in skill_targets and not (battler.team == selected_battler.team)))
+    skill_targets = SKILL_PROPERTIES[skill]['Active']['target_team']
+    return (
+        ('Self' in skill_targets and (battler == selected_battler)) or
+        ('Ally' in skill_targets and (battler.team == selected_battler.team) and battler != selected_battler) or
+        ('Enemy' in skill_targets and (battler.team != selected_battler.team)))
     
 def import_csv_layout(path):
     terrain_map = []
@@ -29,6 +30,7 @@ def import_csv_layout(path):
         for row in layout:
             terrain_map.append(list(row))
         return terrain_map
+
 def combine_range_csvs(csv_paths):
     # 첫 번째 CSV를 읽어서 기본 크기 결정
     with open(csv_paths[0]) as f:

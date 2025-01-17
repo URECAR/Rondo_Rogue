@@ -38,6 +38,7 @@ class Character(pygame.sprite.Sprite):
         
         # 애니메이션 관련 변수
         self.frame_index = 0
+        self.pose = None
 
         self.death_animation = None
         self.isdeathing = False
@@ -157,7 +158,7 @@ class Character(pygame.sprite.Sprite):
             skill_info = SKILL_PROPERTIES.get(skill_name)
             
             if not skill_info:
-                print(f"{skill_name} 스킬 불러오기 실패")
+                print(f"{self.char_type} 의 {skill_name} 스킬 불러오기 실패")
                 continue
                 
             if skill_info['Type'] == 'Passive':
@@ -212,7 +213,7 @@ class Character(pygame.sprite.Sprite):
                 }
                 
                 for stat, value in equip_data['STAT'].items():
-                    if 'multiplier' in stat.lower():
+                    if 'mul' in stat.lower():
                         effect_data['percent'][stat] = value
                     else:
                         effect_data['flat'][stat] = value
@@ -286,6 +287,7 @@ class Character(pygame.sprite.Sprite):
             elif action == 'range_attack':
                 self.waiting = True
                 self.isacting = True
+                self.isfollowing_root = False
                 self.wait_time = pygame.time.get_ticks() + self.attack_delay
             elif action == 'casting':
                 self.casting = True
@@ -492,14 +494,14 @@ class Character(pygame.sprite.Sprite):
         return darkened
     
     def play_animation(self, animation_type):
-        anim_key = self.get_animation_key(animation_type)
+        self.pose = self.get_animation_key(animation_type)
         # 애니메이션 타입이 바뀌면 frame_index 초기화
-        if anim_key != self.current_graphic:
+        if self.pose != self.current_graphic:
             self.frame_index = 0
-        self.current_graphic = anim_key
+        self.current_graphic = self.pose
         
-        if anim_key in self.properties:
-            animation_frames = import_folder(self.properties[anim_key])
+        if self.pose in self.properties:
+            animation_frames = import_folder(self.properties[self.pose])
             
             # size 적용
             scaled_frames = []
@@ -509,7 +511,7 @@ class Character(pygame.sprite.Sprite):
                 scaled_frames.append(pygame.transform.scale(frame, (new_width, new_height)))
             animation_frames = scaled_frames
             
-            dark_key = f'dark_{anim_key}'
+            dark_key = f'dark_{self.pose}'
             if not hasattr(self, 'darkened_frames'):
                 self.darkened_frames = {}
             if dark_key not in self.darkened_frames:
