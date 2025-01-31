@@ -29,6 +29,7 @@ class UI():
         self.selected_menu = 'init'
         self.current_skill_menu_index = 0
         self.current_item_menu_index = 0
+        self.skill_scroll_offset = 0      # 스킬 메뉴의 스크롤 오프셋 추가
         
         self.info_tab = 'items'  # 'items', 'skills', 'profile'
         self.info_item_index = 0  # 아이템 선택 인덱스
@@ -123,23 +124,97 @@ class UI():
         self.display_surface.blit(lv_text, lv_rect)
         self.display_surface.blit(level_number, level_rect)
 
-        # EXP 바
+        # EXP 바와 OVD 원형 게이지 부분
         exp_ratio = character.exp / character.stats['Max_EXP']
-        exp_bar_width = level_section_width + 30
-        exp_bar_height = 12
-        
         exp_font = pygame.font.Font(UI_FONT, 12)
-        exp_text = exp_font.render(f"{int(character.exp)} / {character.stats['Max_EXP']}", True, EXP_COLOR)
-        exp_text_rect = exp_text.get_rect(topleft=(level_section_x - 10, current_y + 35))
-        self.display_surface.blit(exp_text, exp_text_rect)
 
+        # EXP 텍스트를 current/max로 분리하여 각각 렌더링
+        current_exp = exp_font.render(str(int(character.exp)), True, EXP_COLOR)
+        max_exp = exp_font.render(str(character.stats['Max_EXP']), True, EXP_COLOR)
+        separator = exp_font.render("/", True, EXP_COLOR)
+
+        # EXP 바 위치 및 크기 계산
+        exp_bar_width = level_section_width
+        exp_bar_height = 12
         exp_bar_rect = pygame.Rect(level_section_x - 50, current_y + 50, exp_bar_width, exp_bar_height)
+
+        # 텍스트 위치 계산 - 바의 중앙을 기준으로
+        total_text_width = current_exp.get_width() + separator.get_width() + max_exp.get_width()
+        text_start_x = exp_bar_rect.centerx - (total_text_width // 2)
+
+        # 각 텍스트 요소 배치
+        current_exp_rect = current_exp.get_rect(right=text_start_x + current_exp.get_width())
+        current_exp_rect.bottom = exp_bar_rect.top - 2
+        self.display_surface.blit(current_exp, current_exp_rect)
+
+        separator_rect = separator.get_rect(left=current_exp_rect.right + 4)
+        separator_rect.bottom = exp_bar_rect.top - 2
+        self.display_surface.blit(separator, separator_rect)
+
+        max_exp_rect = max_exp.get_rect(left=separator_rect.right + 4)
+        max_exp_rect.bottom = exp_bar_rect.top - 2
+        self.display_surface.blit(max_exp, max_exp_rect)
+
+        # EXP 바 그리기
         pygame.draw.rect(self.display_surface, (60, 60, 60), exp_bar_rect, border_radius=3)
-        
         exp_fill_rect = pygame.Rect(level_section_x - 50, current_y + 50, 
                                 int(exp_bar_width * exp_ratio), exp_bar_height)
         pygame.draw.rect(self.display_surface, EXP_COLOR, exp_fill_rect, border_radius=3)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, exp_bar_rect, 1, border_radius=3)
+
+        circle_radius = 20
+        circle_x = exp_bar_rect.right + 25
+        circle_y = exp_bar_rect.centery
+        circle_border_width = 5
+
+        # 배경 원 그리기
+        circle_surface = pygame.Surface((circle_radius * 2 + 6, circle_radius * 2 + 6), pygame.SRCALPHA)
+
+        # 전체 배경 원 (회색 테두리)
+        pygame.draw.circle(
+            circle_surface,
+            (100, 100, 100, 255),  # 테두리 색상
+            (circle_radius, circle_radius),
+            circle_radius,
+            circle_border_width,
+        )
+
+        # OVD 레벨에 따른 색상 선택
+        gauge_colors = [
+            ((100, 200, 255, 255), (50, 150, 255, 255)),    # 레벨 0: 하늘색
+            ((255, 140, 0, 255), (200, 100, 0, 255)),       # 레벨 1: 주황색
+            ((255, 0, 0, 255), (200, 0, 0, 255)),           # 레벨 2: 빨간색
+            ((180, 100, 255, 255), (130, 50, 255, 255)),    # 레벨 3: 보라색
+        ]
+        main_color, outline_color = gauge_colors[character.OVD_level]
+
+        # 프로그레스 바 진행률
+        if character.OVD_progress > 0:
+            progress_angle = (character.OVD_progress / 100) * 360
+
+            # 각도별 선을 그려 진행률을 표현 (3도 단위로)
+            for angle in range(-90, int(-90 + progress_angle), 5):
+                start_x = int(circle_radius + (circle_radius) * math.cos(math.radians(angle)))
+                start_y = int(circle_radius + (circle_radius) * math.sin(math.radians(angle)))
+
+                end_x = int(circle_radius + (circle_radius - circle_border_width) * math.cos(math.radians(angle)))
+                end_y = int(circle_radius + (circle_radius - circle_border_width) * math.sin(math.radians(angle)))
+
+                pygame.draw.line(circle_surface, main_color, (start_x, start_y), (end_x, end_y), 3)
+
+
+        # 최종 원 표시
+        self.display_surface.blit(circle_surface, (circle_x - circle_radius, circle_y - circle_radius))
+
+        # OVD 레벨 텍스트 - 폰트 크기도 약간 증가
+        ovd_font = pygame.font.Font(UI_FONT, 14)  # 폰트 크기 증가
+        ovd_text = ovd_font.render(str(int(character.OVD_level)), True, TEXT_COLOR)
+        ovd_text_rect = ovd_text.get_rect(center=(circle_x, circle_y))
+        self.display_surface.blit(ovd_text, ovd_text_rect)
+        ovd_label_font = pygame.font.Font(UI_FONT, 8)  # 아주 작은 폰트 크기
+        ovd_label = ovd_label_font.render("OverDrive", True, TEXT_COLOR)
+        ovd_label_rect = ovd_label.get_rect(centerx=circle_x, top=circle_y + circle_radius + 2)
+        self.display_surface.blit(ovd_label, ovd_label_rect)
 
         # 2. 상태 표시
         current_y += header_height + exp_height
@@ -280,6 +355,33 @@ class UI():
                 diff_rect = diff_surface.get_rect(topleft=(value_rect.right + 5, y + 2))
                 self.display_surface.blit(diff_surface, diff_rect)
 
+    def set_main_menu(self):
+        menu_items = []
+        menu_actions = []
+        selected_battler = self.level.map_action.selected_battler
+        # Range 타입 캐릭터인 경우 '사격' 메뉴 추가
+        char_data = CharacterDatabase.data.get(selected_battler.char_type, {})
+        if char_data.get('Class') == 'Range' and not selected_battler.inactive:
+            menu_items.append('사격')
+            menu_actions.append('range')
+        active_skills = [skill for skill in selected_battler.skills 
+            if SKILL_PROPERTIES[skill]['Type'] == 'Active']
+        if active_skills and not selected_battler.inactive:
+            menu_items.append('스킬')
+            menu_actions.append('skill')
+        if selected_battler.inventory and not selected_battler.inactive:
+            menu_items.append('아이템')
+            menu_actions.append('item')
+        menu_items.extend(['정보'])
+        menu_actions.extend(['info'])
+        if not selected_battler.inactive:
+            menu_items.extend(['대기'])
+            menu_actions.extend(['wait'])
+        if selected_battler.OVD_level > 0:
+            menu_items.extend(['오버드라이브'])
+            menu_actions.extend(['overdrive'])
+        return menu_items, menu_actions
+
     def show_player_menu(self, current_menu):
         if not current_menu or not self.level.map_action.selected_battler:
             return
@@ -294,30 +396,7 @@ class UI():
         is_on_left = battler_screen_x < screen_width / 2
 
         # 메뉴 아이템 구성
-        menu_items = []
-        menu_actions = []
-        
-        # Range 타입 캐릭터인 경우 '사격' 메뉴 추가
-        char_data = CharacterDatabase.data.get(selected_battler.char_type, {})
-        if char_data.get('Class') == 'Range' and not selected_battler.inactive:
-            menu_items.append('사격')
-            menu_actions.append('range')
-        active_skills = [skill for skill in selected_battler.skills 
-            if SKILL_PROPERTIES[skill]['Type'] == 'Active']
-        if active_skills and not selected_battler.inactive:
-            menu_items.append('스킬')
-            menu_actions.append('skill')
-        if selected_battler.inventory and not selected_battler.inactive:
-            menu_items.append('아이템')
-            menu_actions.append('item')
-            
-        menu_items.extend(['정보'])
-        menu_actions.extend(['info'])
-        
-        # 기본 메뉴 항목 추가
-        if not selected_battler.inactive:
-            menu_items.extend(['대기'])
-            menu_actions.extend(['wait'])
+        menu_items, menu_actions = self.set_main_menu()
         
 
         if is_on_left:
@@ -367,8 +446,10 @@ class UI():
             return
 
         selected_battler = self.level.map_action.selected_battler
-        active_skills = [skill for skill in selected_battler.skills 
-                        if SKILL_PROPERTIES[skill]['Type'] == 'Active']
+        active_skills = [
+            skill for skill in selected_battler.skills
+            if SKILL_PROPERTIES[skill]['Type'] == 'Active'
+        ]
         
         if not active_skills:
             return
@@ -376,8 +457,8 @@ class UI():
         # 기본 메뉴 크기 계산
         skill_menu_width = MENU_PANEL_WIDTH * 2.5
         description_height = MENU_PANEL_HEIGHT * 1.5  # 설명란 높이
-        skills_start_y = MENU_PANEL_HEIGHT * 2 # 스킬 목록 시작 위치
-        visible_skills = 4  # 한 번에 보여줄 스킬 수
+        skills_start_y = MENU_PANEL_HEIGHT * 2       # 스킬 목록 시작 위치
+        visible_skills = 4                           # 한 번에 보여줄 스킬 수
         skill_menu_height = skills_start_y + (MENU_PANEL_HEIGHT + 16) * visible_skills
 
         # 메뉴 위치 계산
@@ -388,20 +469,32 @@ class UI():
         if is_on_left:
             base_x = selected_battler.rect.right - self.visible_sprites.offset.x + MENU_OFFSET
         else:
-            base_x = selected_battler.rect.left - self.visible_sprites.offset.x - skill_menu_width - MENU_OFFSET
+            base_x = (selected_battler.rect.left - self.visible_sprites.offset.x
+                    - skill_menu_width - MENU_OFFSET)
 
-        base_y = selected_battler.rect.centery - self.visible_sprites.offset.y - skill_menu_height // 2
+        base_y = (selected_battler.rect.centery
+                - self.visible_sprites.offset.y
+                - skill_menu_height // 2)
 
         # 메인 패널
         menu_rect = pygame.Rect(base_x, base_y, skill_menu_width, skill_menu_height)
         pygame.draw.rect(self.display_surface, UI_BG_COLOR, menu_rect)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, menu_rect, 2)
 
-        # 스크롤 위치 계산
+        # 스킬 목록 스크롤 계산
         max_skills = len(active_skills)
-        scroll_offset = max(0, min(selected_skill_index - (visible_skills - 2), max_skills - visible_skills))
-        visible_skills_list = active_skills[scroll_offset:scroll_offset + visible_skills]
+        scroll_offset = getattr(self, 'last_scroll_offset', 0)
 
+        if selected_skill_index < scroll_offset:
+            scroll_offset = selected_skill_index
+        elif selected_skill_index >= scroll_offset + visible_skills:
+            scroll_offset = selected_skill_index - visible_skills + 1
+
+        scroll_offset = max(0, min(scroll_offset, max_skills - visible_skills))
+
+        self.last_scroll_offset = scroll_offset
+
+        visible_skills_list = active_skills[scroll_offset : scroll_offset + visible_skills]
         # 화살표 애니메이션
         current_time = pygame.time.get_ticks()
         arrow_offset = abs(math.sin(current_time / 300)) * 5
@@ -435,67 +528,11 @@ class UI():
             skill_menu_width - 20,
             description_height
         )
-        pygame.draw.rect(self.display_surface, (UI_BG_COLOR[0]-20, UI_BG_COLOR[1]-20, UI_BG_COLOR[2]-20), 
-                        description_rect, border_radius=5)
+        darker_bg = (max(0, UI_BG_COLOR[0]-20),
+                    max(0, UI_BG_COLOR[1]-20),
+                    max(0, UI_BG_COLOR[2]-20))
+        pygame.draw.rect(self.display_surface, darker_bg, description_rect, border_radius=5)
         pygame.draw.rect(self.display_surface, UI_BORDER_COLOR, description_rect, 1, border_radius=5)
-
-        # 설명 텍스트 줄바꿈 및 표시
-        description_lines = self.wrap_text(description, self.font, skill_menu_width - 40)
-        if len(description_lines) > 2:
-            # 스킬 변경 시 스크롤 초기화
-            current_time = pygame.time.get_ticks()
-            if self.current_skill_menu_index != getattr(self, 'last_skill_index', None):
-                self.description_scroll_time = current_time
-                self.last_skill_index = self.current_skill_menu_index
-            
-            # 스크롤 위치 계산
-            if current_time - self.description_scroll_time > self.description_scroll_pause:
-                scroll_offset = ((current_time - self.description_scroll_time - self.description_scroll_pause) 
-                            // self.description_scroll_speed % (len(description_lines) * 20))
-            else:
-                scroll_offset = 0
-
-            # 보이는 줄 계산
-            visible_lines = []
-            total_height = 0
-            for line in description_lines:
-                line_height = self.font.get_size()[1]
-                if total_height - scroll_offset < 40:  # 최대 2줄까지
-                    visible_lines.append(line)
-                total_height += line_height
-
-            # 보이는 줄 표시
-            for i, line in enumerate(visible_lines):
-                line_surface = self.font.render(line, True, TEXT_COLOR)
-                line_rect = line_surface.get_rect(
-                    topleft=(base_x + 20, base_y + 20 + i * 20)
-                )
-                self.display_surface.blit(line_surface, line_rect)
-        else:
-            # 2줄 이하면 그냥 표시
-            for i, line in enumerate(description_lines):
-                line_surface = self.font.render(line, True, TEXT_COLOR)
-                line_rect = line_surface.get_rect(
-                    topleft=(base_x + 20, base_y + 20 + i * 20)
-                )
-                self.display_surface.blit(line_surface, line_rect)
-
-        # 구분선과 장식 추가
-        separator_y = base_y + skills_start_y - 10
-        pygame.draw.line(
-            self.display_surface,
-            UI_BORDER_COLOR,
-            (base_x + 20, separator_y),
-            (base_x + skill_menu_width - 20, separator_y),
-            2
-        )
-        
-        # 장식용 구분점 추가
-        dot_radius = 3
-        dot_x = base_x + skill_menu_width // 2
-        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x, separator_y), dot_radius)
-        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x - 15, separator_y), dot_radius-1)
-        pygame.draw.circle(self.display_surface, UI_BORDER_COLOR, (dot_x + 15, separator_y), dot_radius-1)
 
         # 스크롤 화살표 표시
         if scroll_offset > 0:  # 위쪽 화살표
@@ -516,21 +553,31 @@ class UI():
             ]
             pygame.draw.polygon(self.display_surface, arrow_color, points_down)
 
-        mouse_pos = pygame.mouse.get_pos()
+        # 설명 텍스트 줄바꿈 및 표시
+        description_lines = self.wrap_text(description, self.font, skill_menu_width - 40)
+        for i, line in enumerate(description_lines[:2]):
+            line_surface = self.font.render(line, True, TEXT_COLOR)
+            line_rect = line_surface.get_rect(
+                topleft=(description_rect.x + 10, description_rect.y + 10 + i * 20)
+            )
+            self.display_surface.blit(line_surface, line_rect)
 
+        mouse_pos = pygame.mouse.get_pos()  
+
+        base_y += 10
         # 스킬 목록 표시
         for i, skill in enumerate(visible_skills_list):
-            skill_info = SKILL_PROPERTIES[skill]['Active']
+            skill_data = SKILL_PROPERTIES[skill]['Active']
             skill_level = selected_battler.skills[skill]
             
             # 마나 체크
-            mana_cost = skill_info.get('mp_cost', {}).get(skill_level, 0)
+            mana_cost = skill_data.get('mp_cost', {}).get(skill_level, 0)
             has_enough_mana = selected_battler.Cur_MP >= mana_cost
             
             # 스킬 항목 배경
             item_rect = pygame.Rect(
                 base_x + 10,
-                base_y + skills_start_y + 10 + i * (MENU_PANEL_HEIGHT + 10),
+                base_y + skills_start_y + i * (MENU_PANEL_HEIGHT + 10),
                 skill_menu_width - 20,
                 MENU_PANEL_HEIGHT
             )
@@ -539,7 +586,9 @@ class UI():
             style_name = SKILL_PROPERTIES[skill].get('Style', 'default')
             style = SKILL_STYLES[style_name]
             
-            is_selected = (i + scroll_offset == selected_skill_index)
+            # 현재 선택된 스킬인지 확인
+            global_index = scroll_offset + i  # 실제 skill_list 상의 인덱스
+            is_selected = (global_index == selected_skill_index)
             is_hovered = item_rect.collidepoint(mouse_pos)
             
             # 배경색 결정
@@ -552,7 +601,10 @@ class UI():
                 border_color = style['border_color']
                 text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
             else:
-                bg_color = (UI_BG_COLOR[0]-10, UI_BG_COLOR[1]-10, UI_BG_COLOR[2]-10)
+                darker_ui = (max(0, UI_BG_COLOR[0]-10),
+                            max(0, UI_BG_COLOR[1]-10),
+                            max(0, UI_BG_COLOR[2]-10))
+                bg_color = darker_ui
                 border_color = style['border_color']
                 text_color = style['text_color'] if has_enough_mana else (100, 100, 100)
 
@@ -569,9 +621,9 @@ class UI():
             text_surface.blit(name_text, name_rect)
 
             # 마나 비용 표시
-            if skill_info.get('mp_cost'):
-                mana_cost = f"MP {mana_cost}"
-                mana_text = self.font.render(mana_cost, True, text_color)
+            if skill_data.get('mp_cost'):
+                mana_cost_str = f"MP {mana_cost}"
+                mana_text = self.font.render(mana_cost_str, True, text_color)
                 mana_rect = mana_text.get_rect(midright=(skill_menu_width - 30, MENU_PANEL_HEIGHT // 2))
                 text_surface.blit(mana_text, mana_rect)
 
@@ -1101,7 +1153,8 @@ class UI():
             if self.previous_main_menu != self.current_main_menu:
                 self.reset_info_menu_indexes()
             return self.handle_info_menu()
-        
+        elif self.current_main_menu == 'overdrive':
+            return ['오버드라이브']
         elif self.current_main_menu == 'wait':
             return ['대기']
             
@@ -1110,25 +1163,9 @@ class UI():
 
     def handle_main_menu(self):
         selected_battler = self.level.map_action.selected_battler
-        char_data = CharacterDatabase.data.get(selected_battler.char_type, {})
-        menu_actions = []
+        menu_items ,menu_actions = self.set_main_menu()
         menu_rects = {}  # 각 메뉴 항목의 rect를 저장
         
-        # 메뉴 항목 구성
-        if char_data.get('Class') == 'Range' and not selected_battler.inactive:
-            menu_actions.append('range')
-        
-        active_skills = [skill for skill in selected_battler.skills if SKILL_PROPERTIES[skill]['Type'] == 'Active']
-        if active_skills and not selected_battler.inactive:
-            menu_actions.append('skill')
-        
-        if selected_battler.inventory and not selected_battler.inactive:
-            menu_actions.append('item')
-        
-        menu_actions.extend(['info'])
-
-        if not selected_battler.inactive:
-            menu_actions.extend(['wait'])
 
         # 메뉴 위치 계산
         screen_width = self.display_surface.get_width()
@@ -1184,7 +1221,8 @@ class UI():
         skill_menu_width = MENU_PANEL_WIDTH * 2.5
         description_height = MENU_PANEL_HEIGHT * 1.5  # 설명란 높이
         skills_start_y = MENU_PANEL_HEIGHT * 2  # 스킬 목록 시작 위치
-        skill_menu_height = skills_start_y + (MENU_PANEL_HEIGHT + 10) * len(active_skills)
+        visible_skills = 4  # 한 번에 보여줄 스킬 수
+        skill_menu_height = skills_start_y + (MENU_PANEL_HEIGHT + 10) * visible_skills
 
         # 메뉴 위치 계산
         screen_width = self.display_surface.get_width()
@@ -1197,9 +1235,24 @@ class UI():
             base_x = selected_battler.rect.left - self.visible_sprites.offset.x - skill_menu_width - MENU_OFFSET
 
         base_y = selected_battler.rect.centery - self.visible_sprites.offset.y - skill_menu_height // 2
+        base_y -= 2
+
+        # 스크롤 위치 계산
+        max_skills = len(active_skills)
+        if max_skills > visible_skills:  # 스크롤이 필요한 경우에만
+            if self.current_skill_menu_index >= max_skills - 1:  # 마지막 항목이 선택된 경우
+                self.skill_scroll_offset = max_skills - visible_skills  # 마지막 4개 항목 표시
+            elif self.current_skill_menu_index - self.skill_scroll_offset >= visible_skills:
+                self.skill_scroll_offset = self.current_skill_menu_index - visible_skills + 1
+            elif self.current_skill_menu_index - self.skill_scroll_offset <= 0:
+                self.skill_scroll_offset = self.current_skill_menu_index
+
+        scroll_offset = self.skill_scroll_offset
+        
+        visible_skills = min(4, max_skills - scroll_offset)
 
         # 각 스킬 항목의 rect 체크
-        for i, skill in enumerate(active_skills):
+        for i in range(visible_skills):
             skill_rect = pygame.Rect(
                 base_x + 10,
                 base_y + skills_start_y + i * (MENU_PANEL_HEIGHT + 10),
@@ -1208,39 +1261,43 @@ class UI():
             )
             
             if self.input_manager.is_mouse_in_rect(skill_rect):
-                if self.input_manager.is_left_click():
-                    if self.current_skill_menu_index == i:
-                        skill_level = selected_battler.skills[skill]
-                        if 'mp_cost' in SKILL_PROPERTIES[skill]['Active']:
-                            mana_cost = SKILL_PROPERTIES[skill]['Active']['mp_cost'][skill_level]
-                            if selected_battler.Cur_MP < mana_cost:
-                                return None
-                        self.current_main_menu = self.previous_main_menu = self.neutral_main_menu = 'skill_target'
-                        return ['스킬타겟지정', skill]
-                    self.current_skill_menu_index = i
+                actual_index = scroll_offset + i
+                if actual_index < len(active_skills):  # 유효한 인덱스인지 확인
+                    if self.input_manager.is_left_click():
+                        if self.current_skill_menu_index == actual_index:
+                            skill = active_skills[actual_index]
+                            skill_level = selected_battler.skills[skill]
+                            mana_cost = SKILL_PROPERTIES[skill]['Active'].get('mp_cost', {}).get(skill_level, 0)
+                            if selected_battler.Cur_MP >= mana_cost:
+                                self.current_main_menu = self.previous_main_menu = self.neutral_main_menu = 'skill_target'
+                                return ['스킬타겟지정', skill]
+                        self.current_skill_menu_index = actual_index
+                        self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_MOVE'])
 
         # 마우스 휠 처리
         wheel_movement = self.input_manager.get_wheel_movement()
 
-        # 키보드 입력 처리 (기존 코드)
+        # 키보드 입력 및 마우스 휠 처리
         if self.input_manager.is_just_pressed('Up') or wheel_movement > 0:
-            self.current_skill_menu_index = (self.current_skill_menu_index - 1) % len(active_skills)
-            self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_MOVE'])
+            if self.current_skill_menu_index > 0:
+                self.current_skill_menu_index -= 1
+                self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_MOVE'])
         elif self.input_manager.is_just_pressed('Down') or wheel_movement < 0:
-            self.current_skill_menu_index = (self.current_skill_menu_index + 1) % len(active_skills)
-            self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_MOVE'])
+            if self.current_skill_menu_index < len(active_skills) - 1:
+                self.current_skill_menu_index += 1
+                self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_MOVE'])
         elif self.input_manager.is_just_pressed('Select'):
             self.sound_manager.play_sound(**SOUND_PROPERTIES['MENU_SELECT'])
             selected_skill = active_skills[self.current_skill_menu_index]
             skill_level = selected_battler.skills[selected_skill]
-            mana_cost = SKILL_PROPERTIES[selected_skill]['Active'].get('mp_cost',{}).get(skill_level)
-            if mana_cost:
-                if selected_battler.Cur_MP < mana_cost:
-                    return None
+            mana_cost = SKILL_PROPERTIES[selected_skill]['Active'].get('mp_cost', {}).get(skill_level, 0)
+            if mana_cost and selected_battler.Cur_MP < mana_cost:
+                return None
             self.current_main_menu = self.previous_main_menu = self.neutral_main_menu = 'skill_target'
             return ['스킬타겟지정', selected_skill]
         elif (self.input_manager.is_just_pressed('Cancel') or 
             self.input_manager.is_right_click()) and self.previous_main_menu == 'skill':
+            self.current_skill_menu_index = 0
             self.current_main_menu = 'main'
             self.selected_menu = 'skill'
 

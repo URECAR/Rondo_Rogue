@@ -65,7 +65,7 @@ BAR_COLOR_SELECTED = '#111111'
 DIRECTIONS = ['UP', 'LEFT', 'DOWN', 'RIGHT']
 
 # sound settings
-INITIAL_MASTER_VOLUME = 0.8
+INITIAL_MASTER_VOLUME = 0.0
 INITIAL_MUSIC_VOLUME = 0.5
 INITIAL_SFX_VOLUME = 0.5
 
@@ -76,6 +76,12 @@ SKILL_STYLES = {
        'text_color': (255, 255, 255),    # 흰색
        'bg_color': (0, 0, 0, 200)        # 반투명 검정
    },
+   'uncommon': {
+         'border_color': (50, 205, 50),    # 라임
+         'text_color': (144, 238, 144),    # 연한 라임
+         'bg_color': (0, 0, 0, 200)
+   },
+
    'magic': {    # 마법 스킬용
        'border_color': (100, 149, 237),  # 파란색 
        'text_color': (135, 206, 235),    # 하늘색

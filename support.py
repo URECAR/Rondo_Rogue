@@ -669,4 +669,3 @@ class MessageDialog:
                 self.is_instant = True
 
         return None
-

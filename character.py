@@ -130,12 +130,19 @@ class Character(pygame.sprite.Sprite):
 
         # 패시브 스킬 효과 적용
         self.init_apply_passive_skills()
-        print(str(self.name)+"의 초기 effect 목록 " + str(self.effects))
+        
+        # print(str(self.name)+"의 초기 effect 목록 " + str(self.effects))
         self.Cur_HP = int(self.stats['Max_HP'])
         self.Cur_MP = int(self.stats['Max_MP'])
 
         self.exp = 0
         self.tmp_exp_gain = 0
+        self.upgrade_points = 0
+        self.OVD_skill = char_data.get('OverDrive',{}).get('skill','')
+        self.OVD_level = 0
+        self.OVD_progress = 0
+        self.OVD_max_level = int(char_data.get('OverDrive',{}).get('max_level',0))
+        
         
         self.force_inactive = False
         self.activate_condition = {
@@ -152,6 +159,16 @@ class Character(pygame.sprite.Sprite):
 
         # 마지막으로 모든 효과 적용하여 스탯 업데이트
         self.effect_manager.update_effects(self)
+
+    def __repr__(self):
+        """Effect 객체의 기본 출력 형태"""
+        # 기본 정보
+        character_str = ""
+        character_str += f"{self.name} (LV {self.LV}) "
+        # character_str += f"HP: {self.Cur_HP}/{self.stats['Max_HP']}, MP: {self.Cur_MP}/{self.stats['Max_MP']} "
+        # character_str += f"EXP: {self.exp}, OVD: {self.OVD_level} ({self.OVD_progress}/{self.OVD_max_level})"
+
+        return character_str
 
     def init_apply_passive_skills(self):
         for skill_name, skill_level in self.skills.items():

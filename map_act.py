@@ -34,6 +34,7 @@ class MapAction:
             "select_range_target": Select_Range_Target_State(self),
             "select_item_target": Select_Item_Target_State(self),
             "event": Event_State(self),
+            "upgrade": Upgrade_State(self),
         }
         self.current_state = self.states["init"]
         self.move_roots = []
@@ -89,7 +90,7 @@ class MapAction:
         for battler in self.level.battler_sprites:
             if battler.tmp_exp_gain:
                 # 경험치 획득량 계산 (CHA와 EXP 배율 적용)
-                exp_gain = battler.tmp_exp_gain * (1 + 0.01 * battler.stats["CHA"]) * battler.stats["EXP_mul"]
+                exp_gain = battler.tmp_exp_gain * (1 + 0.005 * battler.stats["CHA"]) * battler.stats["EXP_mul"]
                 battler.exp += exp_gain
                 battler.tmp_exp_gain = 0
                 
@@ -98,24 +99,26 @@ class MapAction:
                     # 초과 경험치 계산
                     excess_exp = battler.exp - battler.stats['Max_EXP']
                     
+                    lost_hp = battler.stats['Max_HP'] - battler.Cur_HP
+                    lost_mp = battler.stats['Max_MP'] - battler.Cur_MP
+                    
                     # 레벨업
                     battler.LV += 1
+                    battler.upgrade_points += 1
+                    # 새로운 base_stats 계산하고 적용
+                    new_base_stats = CharacterDatabase.calculate_stats(battler.char_type, battler.LV)
+                    battler.base_stats = new_base_stats.copy()
                     
-                    # 새로운 스탯 계산
-                    new_stats = CharacterDatabase.calculate_stats(battler.char_type, battler.LV)
-                    
-                    # HP, MP 회복 처리 (레벨업 리젠 포함)
-                    hp_heal = (new_stats["Max_HP"] - battler.stats['Max_HP'] + 
-                            battler.stats["Level_Up_Regen"] * new_stats["Max_HP"])
-                    mp_heal = (new_stats["Max_MP"] - battler.stats['Max_MP'] + 
-                            battler.stats["Level_Up_Regen"] * new_stats["Max_MP"])
-                            
-                    battler.Cur_HP = min(battler.Cur_HP + hp_heal, new_stats["Max_HP"])
-                    battler.Cur_MP = min(battler.Cur_MP + mp_heal, new_stats["Max_MP"])
-                    
-                    # 기본 스탯 업데이트하고 효과 재계산
-                    battler.base_stats = new_stats.copy()
+                    # 패시브 효과 재계산
                     self.effect_manager.update_effects(battler)
+                    
+                    # 레벨업 리젠으로 인한 회복량 계산 (최대치에 비례)
+                    regen_hp = battler.stats["Max_HP"] * (battler.stats["Level_Up_Regen"] / 100)
+                    regen_mp = battler.stats["Max_MP"] * (battler.stats["Level_Up_Regen"] / 100)
+                    
+                    # HP/MP 설정 (잃은 양은 유지하고 레벨업 리젠 적용)
+                    battler.Cur_HP = min(battler.stats["Max_HP"] - lost_hp + regen_hp, battler.stats["Max_HP"])
+                    battler.Cur_MP = min(battler.stats["Max_MP"] - lost_mp + regen_mp, battler.stats["Max_MP"])
                     
                     # 초과 경험치 이전
                     battler.exp = excess_exp
@@ -124,6 +127,17 @@ class MapAction:
                     self.animation_manager.create_animation(battler, 'LEVEL_UP')
                     self.animation_manager.create_animation(battler, 'AURA')
        
+    def process_OVD_gain(self):
+        for battler in self.level.battler_sprites:
+            if battler.OVD_progress // 100 >= 1 and battler.OVD_max_level > battler.OVD_level:
+                battler.OVD_level += int(battler.OVD_progress // 100)
+                if battler.OVD_level == battler.OVD_max_level:
+                    battler.OVD_progress = 0
+                else:
+                    battler.OVD_progress = battler.OVD_progress % 100
+            elif battler.OVD_max_level == battler.OVD_level:
+                battler.OVD_progress = 0
+         
     def use_item(self, battler, item_name):
         """아이템 사용 처리"""
         if item_name not in self.selected_battler.inventory:
@@ -409,18 +423,19 @@ class MapAction:
         # 데미지 스킬인 경우
         else:
             if skill_info['damage']['dmg_type'] == 'magical':
-                target_magic_def = target.stats["INT"] * 0.2 + target.stats["RES"] * 0.4
-                level_diff_bonus = (self.selected_battler.stats["INT"] - target.stats["INT"]) * 0.015
-                skill_multiplier = skill_info['damage'].get('dmg_coef', {}).get(skill_level, 0)
-                damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+                damage = CombatFormulas.calculate_magic_damage(self.selected_battler, target, skill_name, skill_level)
                 self.Acted.append([target,'Magic_Damage',damage])
 
                 # 데미지 처리
-                self.Damage(self.selected_battler, target, damage, "Magic")
-                
+                if skill_info['type'] == 'overdrive':
+                    self.Damage(self.selected_battler, target, damage, "Overdrive")
+                elif skill_info['type'] == 'magic':
+                    self.Damage(self.selected_battler, target, damage, "Magic")
+                elif skill_info['type'] == 'skill':
+                    self.Damage(self.selected_battler, target, damage, "Skill")
                 # 상태이상 적용
-                if target.Cur_HP > 0 and skill_info['effects'].get(skill_level, None):
-                    status_chances = skill_info['status'].get(skill_level, {})
+                if target.Cur_HP > 0 and skill_info.get('effects',{}).get(skill_level, None):
+                    status_chances = skill_info.get('status',{}).get(skill_level, 0)
                     for status, chance in status_chances.items():
                         if random.random() * 100 < chance:
                             effect = Effect(effect_type='status',effects=STATUS_PROPERTIES[status].get('Stat', {}),source=f"status_{status}",remaining_turns=STATUS_PROPERTIES[status]['duration'])
@@ -431,7 +446,11 @@ class MapAction:
                     self.effect_manager.update_effects(target)
 
     def check_magic_range(self, battler, skill):
-        skill_range = SKILL_PROPERTIES[skill]['Active'].get('range',{}).get(battler.skills[skill], 0)
+        if SKILL_PROPERTIES[skill]['Active']['type'] == 'overdrive':
+            skill_level = battler.OVD_level
+        elif SKILL_PROPERTIES[skill]['Active']['type'] in ['skill', 'magic']:
+            skill_level = battler.skills[skill]
+        skill_range = SKILL_PROPERTIES[skill]['Active'].get('range',{}).get(skill_level, 0)
         
         facing = self.temp_facing
         shape = SKILL_PROPERTIES[skill]['Active'].get('range_type',None)
@@ -444,7 +463,6 @@ class MapAction:
                 # 방향별 오프셋 정의
             direction_offsets = {'up': (0, -1),'down': (0, 1),'left': (-1, 0),'right': (1, 0)}
             # 현재 방향 (또는 임시 방향) 기준으로 타일 생성
-            facing = getattr(self, 'temp_facing', battler.facing)
             dx, dy = direction_offsets[facing]
             # 직선상의 타일 생성
             for i in range(1, skill_range + 1):
@@ -463,7 +481,11 @@ class MapAction:
 
     def check_magic_area(self,battler,skill,cursor):
         skill_info = SKILL_PROPERTIES[skill]['Active']
-        area_range = skill_info['area']['range'].get(battler.skills[skill],0)
+        if skill_info['type'] == 'overdrive':
+            skill_level = battler.OVD_level
+        elif skill_info['type'] in ['skill', 'magic']:
+            skill_level = battler.skills[skill]
+        area_range = skill_info['area']['range'].get(skill_level,0)
         attackable_area = []
         if skill_info['area']['type'] == 'diamond':
             diamond = [(dx, dy) for dx in range(-area_range, area_range + 1) for dy in range(-area_range, area_range + 1) if abs(dx) + abs(dy) <= area_range]
@@ -606,48 +628,43 @@ class MapAction:
             self.selected_battler.isfollowing_root = False
             self.selected_battler.selected = False
             self.selected_battler.priority = self.selected_battler.pos.y * TILESIZE
-            # print("@@삭제전 + "+str(self.selected_battler.stats))
+            # 턴 종료 시 삭제되는 임시 버프 효과 처리
             for effect in self.selected_battler.effects:
                 if effect.type == 'supportbuff':
                     self.effect_manager.remove_effect(self.selected_battler, effect_type=effect.type)
-            # print("@@삭제후 + "+str(self.selected_battler.stats))
             # 턴 행동에 따른 activate_condition 초기화
             if not all(battler.inactive for battler in self.level.battler_sprites if battler.team == self.current_phase and battler.pos != self.selected_battler.pos):
-                # Check each action type using proper format
                 for actions in self.Acted:
                     target = actions[0]
                     action = actions[1]
                     detail = actions[2] if len(actions) > 2 else None
-                    # Movement action
                     if action == 'Move':
-                        self.selected_battler.activate_condition['Turn_Without_Move'] = 0
-                    
-                    # Magic casting action
+                        self.selected_battler.activate_condition['Turn_Without_Move'] = 0                    
                     elif action == 'Magic_Casting':
                         self.selected_battler.activate_condition['Turn_Without_Magic'] = 0
-                    # Skill casting action
                     elif action == 'Use_Skill':
-                        self.selected_battler.activate_condition['Turn_Without_Skill'] = 0
-                    
-                    # Range attack action
+                        self.selected_battler.activate_condition['Turn_Without_Skill'] = 0                    
                     elif action == 'Range':
-                        self.selected_battler.activate_condition['Turn_Without_Range'] = 0
-                    
-                    # Melee attack action
+                        self.selected_battler.activate_condition['Turn_Without_Range'] = 0                    
                     elif action == 'Melee':
                         self.selected_battler.activate_condition['Turn_Without_Melee'] = 0
-
-            self.selected_battler = None
-        
-        if all(battler.inactive for battler in self.level.battler_sprites 
+                    elif action == 'Overdrive':
+                        self.selected_battler.OVD_level = 0
+        if hasattr(self.selected_battler,'upgrade_points') and self.selected_battler.upgrade_points > 0:
+            self.change_state('upgrade')
+        elif all(battler.inactive for battler in self.level.battler_sprites 
             if battler.team == self.current_phase):
+            self.selected_battler = None
             self.change_state('phase_change')
         else:
             self.level.cursor.select_lock = False
             self.level.cursor.move_lock = False
+            self.selected_battler = None
             self.change_state('explore')
-
-        print(self.Acted)        
+      
+        # for act in self.Acted:
+        #     print(act)
+        
 
         self.Acted = []   
     
@@ -690,20 +707,26 @@ class MapAction:
             target.Cur_HP = min(target.Cur_HP - damage, target.stats["Max_HP"])
             attacker.tmp_exp_gain += kill_exp * dmg_ratio * 0.5  # 회복은 절반의 경험치
         else:
-            if damage > target.Cur_HP:
-                target.Cur_HP = 0
-                attacker.tmp_exp_gain += kill_exp * (1 + target.Cur_HP / max_hp)
+            # Calculate damage and exp gain
+            kill_multiplier = 1 + target.Cur_HP / max_hp if damage > target.Cur_HP else 1
+            dmg_multiplier = kill_multiplier if damage > target.Cur_HP else dmg_ratio
+            
+            # Apply damage
+            target.Cur_HP = max(0, target.Cur_HP - damage)
+            
+            # Calculate rewards
+            attacker.tmp_exp_gain += kill_exp * dmg_multiplier
+            
+            # 공격자는 데미지 비율만큼 오버드라이브 게이지 획득(오버드라이브로 입힌 데미지는 제외)
+            if attacker.OVD_max_level > attacker.OVD_level and attacker.team != target.team and damage_type != 'Overdrive':
+                attacker.OVD_progress += dmg_multiplier * (1 + 0.01 * attacker.stats['CHA']) * attacker.stats['OVD_charge_rate'] * 50
+            # 피격자는 데미지 비율 * 50% 만큼 오버드라이브 게이지 획득
+            if target.OVD_max_level > target.OVD_level and attacker.team != target.team:
+                target.OVD_progress += dmg_multiplier * (1 + 0.01 * attacker.stats['CHA']) * target.stats['OVD_charge_rate'] * 25
                 
-                # CHA 증가 효과
-                cha_boost = int(5 * cha_multiplier * (1 + dmg_ratio))
-                self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
-            else:
-                target.Cur_HP -= damage
-                attacker.tmp_exp_gain += kill_exp * dmg_ratio
-                
-                # CHA 증가 효과
-                cha_boost = int(5 * cha_multiplier * dmg_ratio)
-                self.effect_manager.apply_temporary_buff(attacker,'cha_boost',{'flat': {'CHA': cha_boost}},duration=None)
+            # CHA boost
+            cha_boost = int(5 * cha_multiplier * dmg_multiplier)
+            self.effect_manager.apply_temporary_buff(attacker, 'cha_boost', {'flat': {'CHA': cha_boost}}, duration=None)
 
         # 상태이상이나 조건부 효과들 체크
         self.effect_manager.update_effects(target)  # 대상의 효과 업데이트

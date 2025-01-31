@@ -13,6 +13,7 @@ from character import Character
 from database import MAP1
 from animation import AnimationManager
 from common_method import import_csv_layout,combine_range_csvs
+import math
 class Level:
     def __init__(self):
 
@@ -31,7 +32,6 @@ class Level:
         # self.create_map1()                                  # map1 생성
         self.create_map2()
         self.map_action = MapAction(self)  # MapAction 인스턴스 생성
-
     def create_map2(self):
         # 맵 데이터 로드
         map_data = {
@@ -198,9 +198,10 @@ class Level:
         # debug(self.battlers['Player1'].effect_manager.get_active_effects(self),)
         debug(self.battlers['Player3'].pose)
         debug(self.cursor.pos, x = 150)
-        # debug(self.map_action.current_state, x = 70)
-        # debug(self.map_action.elapsed_turn, y= 50)
+        debug(self.map_action.current_state, x = 70)
+        debug(self.battlers['Player1'].skills, y= 50)
         debug(self.battlers['Player1'].effects, y= 70)
+        debug([battler.OVD_progress for battler in self.battler_sprites], y= 90)
 
 class YSortCameraGroup(pygame.sprite.Group):
     def __init__(self):
@@ -232,6 +233,14 @@ class YSortCameraGroup(pygame.sprite.Group):
         self.is_moving = False
         self.move_speed = 0.15
 
+        # 쉐이크 효과 관련 변수 추가
+        self.shake_time = 0
+        self.shake_duration = 0
+        self.shake_intensity = 0
+        self.shake_direction = 'horizontal'  # 'horizontal' or 'vertical'
+        self.shake_offset = pygame.math.Vector2(0, 0)
+        self.last_shake_update = pygame.time.get_ticks()
+
     def enable_zoom(self):
         """Enable zoom and set target zoom to battle zoom level"""
         self.zoom_enabled = True
@@ -253,7 +262,51 @@ class YSortCameraGroup(pygame.sprite.Group):
             self.target_offset = pygame.math.Vector2(target_x, target_y)
             self.is_moving = True
 
+    def start_shake(self, duration, intensity=5, direction='horizontal'):
+        """
+        화면 흔들기 효과 시작
+        :param duration: 지속 시간 (초)
+        :param intensity: 흔들림 강도 (픽셀)
+        :param direction: 흔들림 방향 ('horizontal' 또는 'vertical')
+        """
+        self.shake_time = 0
+        self.shake_duration = duration
+        self.shake_intensity = intensity
+        self.shake_direction = direction
+        self.last_shake_update = pygame.time.get_ticks()
+
+    def update_shake(self):
+        """쉐이크 효과 업데이트"""
+        if self.shake_time < self.shake_duration:
+            current_time = pygame.time.get_ticks()
+            dt = (current_time - self.last_shake_update) / 1000.0  # 초 단위로 변환
+            self.last_shake_update = current_time
+            
+            self.shake_time += dt
+            
+            # 시간에 따른 강도 감소 (서서히 약해지는 효과)
+            current_intensity = self.shake_intensity * (1 - (self.shake_time / self.shake_duration))
+            
+            # 사인 함수를 사용하여 부드러운 흔들림 효과 생성
+            shake_amount = math.sin(self.shake_time * 30) * current_intensity
+            
+            if self.shake_direction == 'horizontal':
+                self.shake_offset.x = shake_amount
+                self.shake_offset.y = 0
+            elif self.shake_direction == 'vertical':
+                self.shake_offset.x = 0
+                self.shake_offset.y = shake_amount
+            else:  # both
+                self.shake_offset.x = shake_amount
+                self.shake_offset.y = shake_amount
+        else:
+            # 쉐이크 효과 종료
+            self.shake_offset = pygame.math.Vector2(0, 0)
+
     def custom_draw(self, player):
+        # 쉐이크 효과 업데이트
+        self.update_shake()
+        
         # 카메라 이동 처리
         if self.is_moving:
             diff_x = self.target_offset.x - self.offset.x
@@ -281,38 +334,40 @@ class YSortCameraGroup(pygame.sprite.Group):
         # 맵 경계 처리
         self.offset.x = max(0, min(self.offset.x, self.Mapmax.x - WIDTH))
         self.offset.y = max(0, min(self.offset.y, self.Mapmax.y - HEIGHT))
+
+        # 쉐이크 오프셋 적용
+        final_offset = self.offset + self.shake_offset
+
         # 일반 렌더링
         self.render_surface.fill((0, 0, 0, 0))
         for sprite in sorted(self.sprites(), key=lambda sprite: sprite.priority if hasattr(sprite, 'priority') else sprite.rect.centery):
-            offset_pos = sprite.rect.topleft - self.offset
+            offset_pos = sprite.rect.topleft - final_offset  # 쉐이크 효과가 적용된 오프셋 사용
             self.render_surface.blit(sprite.image, offset_pos)
 
-        # 줌 처리
+        # 줌 처리 (기존 코드와 동일)
         if self.zoom_enabled:
             if abs(self.zoom_scale - self.target_zoom) > 0.001:
                 self.zoom_scale += (self.target_zoom - self.zoom_scale) * self.zoom_speed
 
-            # 줌된 이미지의 크기 계산
             zoom_width = int(WIDTH * self.zoom_scale)
             zoom_height = int(HEIGHT * self.zoom_scale)
             
-            # 줌 중심점 계산
             center_x = WIDTH // 2
             center_y = HEIGHT // 2
             
-            # 줌된 영역 계산
-            zoom_rect = pygame.Rect(center_x - (zoom_width // 2),center_y - (zoom_height // 2),zoom_width,zoom_height)
+            zoom_rect = pygame.Rect(
+                center_x - (zoom_width // 2),
+                center_y - (zoom_height // 2),
+                zoom_width,
+                zoom_height
+            )
 
-            # 원본 surface를 줌 크기로 스케일링
-            scaled_surface = pygame.transform.scale(self.render_surface,(zoom_width, zoom_height))
+            scaled_surface = pygame.transform.scale(self.render_surface, (zoom_width, zoom_height))
 
-            # 줌된 이미지를 화면 중앙에 그리기
             self.display_surface.fill((0, 0, 0))
-            self.display_surface.blit(scaled_surface, (center_x - zoom_width // 2,center_y - zoom_height // 2))
+            self.display_surface.blit(scaled_surface, (center_x - zoom_width // 2, center_y - zoom_height // 2))
         else:
-            # 줌이 비활성화된 경우 일반 렌더링
             self.display_surface.blit(self.render_surface, (0, 0))
-
     def focus_on_target(self, target, cursor_obj=None):
         """특정 대상의 위치로 카메라를 부드럽게 이동, 커서는 즉시 이동"""
         # 타겟의 중앙 위치 계산

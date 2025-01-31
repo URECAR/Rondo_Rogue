@@ -1,5 +1,5 @@
 # ai.py
-from database import CharacterDatabase, SKILL_PROPERTIES
+from database import CharacterDatabase, SKILL_PROPERTIES,CombatFormulas
 import pygame
 from tile import Tile
 from properties import *
@@ -270,7 +270,7 @@ class AI():
         result = []
         usable_skills = []
         for skill in self.selected_battler.skills:
-            if SKILL_PROPERTIES[skill].get('Style') == 'magic' and self.selected_battler.Cur_MP >= SKILL_PROPERTIES[skill]['Mana'][self.selected_battler.skills[skill]]:
+            if SKILL_PROPERTIES[skill].get('Active',{}).get('type',None) == 'magic' and self.selected_battler.Cur_MP >= SKILL_PROPERTIES[skill].get('Active',{}).get('mp_cost',None).get(self.selected_battler.skills[skill],None):
                 print(f"사용가능한 스킬 {skill},LV.{self.selected_battler.skills[skill]}")
                 usable_skills.append(skill)
         if not usable_skills:
@@ -280,9 +280,9 @@ class AI():
                 return '아이템사용'
             
         for skill in usable_skills:
-            skill_info = SKILL_PROPERTIES[skill]
+            skill_info = SKILL_PROPERTIES[skill]['Active']
             
-            if skill_info['shape'] != 'linear':
+            if skill_info['range_type'] != 'linear':
                 attackable_pos = self.map_action.check_magic_range(self.selected_battler, skill)
                 # print(skill,attackable_pos)
                 single_kill_targets = []
@@ -290,19 +290,16 @@ class AI():
                 other_targets = []
                 for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
                     if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler): #and battler.team != self.selected_battler.team:
-                        target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
-                        level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
-                        skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
-                        virtual_damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+                        virtual_damage = CombatFormulas.calculate_magic_damage(self.selected_battler, battler, skill, self.selected_battler.skills[skill])
 
-                        if skill_info['skill_type'] == 'Targeting_all':
+                        if skill_info['target_option'] == 'all':
                             if battler.Cur_HP <= virtual_damage:
                                 single_kill_targets.append(battler)
                             elif battler.Cur_HP <= (virtual_damage * 2):
                                 double_kill_targets.append(battler)
                             else:
                                 other_targets.append(battler)
-                        elif skill_info['skill_type'] == 'Targeting':
+                        elif skill_info['target_option'] == 'one':
                             if battler.Cur_HP <= virtual_damage:
                                 single_kill_targets = [battler]
                                 double_kill_targets = []  # Changed from None to empty list
@@ -318,7 +315,7 @@ class AI():
                                 other_targets = [battler]
                 result.append([skill, single_kill_targets, double_kill_targets, other_targets])
                     
-            elif skill_info['shape'] == 'linear':
+            elif skill_info['range_type'] == 'linear':
                 for facing in ['up','left','down','right']:
                     self.map_action.temp_facing = facing
                     attackable_pos = self.map_action.check_magic_range(self.selected_battler, skill)
@@ -327,10 +324,8 @@ class AI():
                     other_targets = []
                     for battler in sorted(self.level.battler_sprites, key=lambda x: x.stats["CHA"], reverse=True):
                         if battler.pos in attackable_pos and istarget(skill, self.selected_battler, battler): #and battler.team != self.selected_battler.team:
-                            target_magic_def = battler.stats["INT"] * 1.2 + battler.stats["RES"] * 0.4
-                            level_diff_bonus = (self.selected_battler.stats["INT"] - battler.stats["INT"]) * 0.015
-                            skill_multiplier = skill_info.get('Dmg_Coff', {}).get(self.selected_battler.skills[skill], 0)
-                            virtual_damage = ((1 + level_diff_bonus) * skill_multiplier * 1.5) - target_magic_def
+
+                            virtual_damage = CombatFormulas.calculate_magic_damage(self.selected_battler, battler, skill, self.selected_battler.skills[skill])
 
                             if battler.Cur_HP <= virtual_damage:
                                 single_kill_targets.append(battler)
@@ -350,7 +345,7 @@ class AI():
             skill_name = skill_info[0]
             # 모든 타겟을 하나의 리스트로 합침 (이제 None 값이 없으므로 안전하게 연결 가능)
             all_targets = skill_info[1] + skill_info[2] + skill_info[3]
-            print(skill_name,[target.team for target in all_targets])
+            # print(skill_name,[target.team for target in all_targets])
             
             if len([target for target in all_targets if target.team != self.selected_battler.team]) > max_targets:
                 max_targets = len(all_targets)

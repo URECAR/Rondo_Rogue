@@ -64,7 +64,7 @@ class CharacterDatabase:
                 '아이스1' : 1,
                 '아이스2' : 1,
                 '번개 마법1' : 1,
-                '오버드라이브1' : 1,
+                # '오버드라이브1' : 1,
                 '근접 방어 태세' : 1,
                 '테스트스킬3' : 1,
                 '힐링' : 1,
@@ -74,6 +74,11 @@ class CharacterDatabase:
                 '무념의 기보' : 3,
                 # 'Z.O.C 무시' : 1,
                 '신중함' : 3,
+            },
+            'OverDrive' : {                 # select_OV_Target 함수로 사용 진행. 
+                'skill' : '오버드라이브1',
+                'max_level' : 3,
+                'charge_speed' : [1,1],     # 본인이 입은 데미지 비율 * charge_speed[0] + 상대방에게 입힌 데미지 비율 * charge_speed[1]
             },
         },
         'Player2': {
@@ -231,6 +236,7 @@ class CharacterDatabase:
             },
             'hidden_stats': ['STR', 'Mov'],
             'Kill_EXP': 30,
+            # ''
         },
         'Bamboo': {
             'name'  : '대나 무',
@@ -378,6 +384,7 @@ class CharacterDatabase:
                     total_growth += (level - current_level) * growth['default'][stat]
                 
                 base_stats[stat] += total_growth
+        # stats에 combat_stats 추가
         combat_stats = {
             'Melee_atk_mul': 1.0,   'Melee_def_mul': 1.0,
             'Magic_atk_mul': 1.0,   'Magic_def_mul': 1.0,
@@ -392,40 +399,41 @@ class CharacterDatabase:
             'Counter_Chance': 0, 'Counter_atk_mul': 1.0, 'ZOC_Chance': 0, 'ZOC_Ignore_Chance' : 0,
             'CHA_increase_mul' : 1.0,
             'EXP_mul' : 1.0, 'Level_Up_Regen' : 0,
+            'OVD_charge_rate' : 1.0
         }
         base_stats.update(combat_stats)  # stats에 combat_stats 통합
         return base_stats
 class CombatFormulas:
-    def calculate_melee_damage(self,attacker, target, Damage_Bonus_multiplier, is_critical):
+    def calculate_melee_damage(attacker, target, Damage_Bonus_multiplier, is_critical):
         """근접 공격 데미지 계산 공식"""
         base_damage = (attacker.stats['STR'] * 2 - target.stats['RES'])
         multiplier = attacker.stats['Melee_atk_mul'] * target.stats['Melee_def_mul'] * Damage_Bonus_multiplier
         if is_critical:
             multiplier *= attacker.stats['Critical_atk_mul']
         Final_Damage = int(max(base_damage * multiplier, 0))
-        self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
         return Final_Damage
 
-    def calculate_range_damage(self, attacker, target, is_critical):
+    def calculate_range_damage( attacker, target, is_critical):
         """원거리 공격 데미지 계산 공식"""
         base_damage = (attacker.stats['STR'] + attacker.stats['DEX'] - target.stats['RES'])
         multiplier = attacker.stats['Ranged_atk_mul'] * target.stats['Ranged_def_mul']
         if is_critical:
             multiplier *= attacker.stats['Critical_atk_mul']
         Final_Damage = int(max(base_damage * multiplier, 0))
-        self.map_action.Acted.append([target,'Damage_Calculated', Final_Damage])
         return Final_Damage
 
-    def calculate_magic_damage(self,attacker, defender, skill_power):
+    def calculate_magic_damage(attacker, defender, skill_name, skill_level):
         """마법 공격 데미지 계산 공식"""
-        base_damage = attacker.stats['INT'] * skill_power - defender.stats['RES']
-        multiplier = attacker.stats['Magic_atk_mul'] * defender.stats['Magic_def_mul']
-        Final_Damage = int(max(base_damage * multiplier, 0))
-        self.map_action.Acted.append([defender,'Damage_Calculated', Final_Damage])
+        skill_info = SKILL_PROPERTIES[skill_name]['Active']
+        
+        target_magic_def = defender.stats["INT"] * 0.2 + defender.stats["RES"] * 0.4
+        stat_diff_bonus = (attacker.stats["INT"] - defender.stats["INT"]) * 0.015
+        skill_multiplier = skill_info['damage'].get('dmg_coef', {}).get(skill_level, 0)
+        Final_Damage = int(max(((1 + stat_diff_bonus) * skill_multiplier * 1.5) - target_magic_def, 0))
         return Final_Damage
 
     def calculate_melee_counter_damage(self,attacker,target):
-        Counter_damage = int((target.stats['DEX'] + target.stats['STR'] - attacker.stats["RES"]) * target.stats["Melee_attack_multiplier"] * attacker.stats["Melee_defense_multiplier"] * target.stats["Counter_attack_multiplier"])
+        Counter_damage = int((target.stats['DEX'] + target.stats['STR'] - attacker.stats["RES"]) * target.stats["Melee_atk_mul"] * attacker.stats["Melee_def_mul"] * target.stats["Counter_atk_mul"])
         self.map_action.Acted.append([attacker,'Counter_Damage_Calculated', Counter_damage])
         return Counter_damage
 
@@ -439,14 +447,13 @@ class CombatFormulas:
         total_counter_chance = (target.stats["Counter_Chance"] + (target.stats["DEX"] - attacker.stats["DEX"]) * 0.5 - vurnerable["counter"]) * 0.01
         self.map_action.Acted.append([target,'Counter_Check',total_counter_chance])
         if total_counter_chance > random.random():
-            self.map_action.Acted.append([target,'Counter_Check','Executed'])
+            self.map_action.Acted.append([target,'Counter_Check',[total_counter_chance,'Executed']])
             return True
         else:
             return False 
 
     def check_melee_evasion(self, attacker, target, vurnerable):
         total_hit_chance = attacker.stats["Accuracy_rate"]+( ((attacker.stats["DEX"] - target.stats["DEX"]) * 2  - target.stats["Melee_evasion_chance"] + vurnerable["evasion"]) * 0.01)
-        self.map_action.Acted.append([target,'Hit_Check',total_hit_chance])
         if total_hit_chance < random.random():
             self.map_action.Acted.append([target,'Hit_Check','Evaded'])
             return True 
@@ -769,7 +776,7 @@ SKILL_PROPERTIES = {
     
         # 액티브 스킬 속성
         'Active': {
-            'type': 'magic',        ## skill / magic
+            'type': 'magic',        ## skill / magic / overdrive
             'skill_type' : '',      ## attack / support / heal / buff / buff_temp / debuff / summon
             
             # 범위 관련
@@ -904,6 +911,39 @@ SKILL_PROPERTIES = {
             },
         },
     },
+    # 단순 스탯 증가
+    '무도의 진수': {
+        'Type': 'Passive',
+        'Description': '보유 시 STR이 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'STR': 3},
+                    2: {'STR': 6},
+                    3: {'STR': 9},
+                },
+            },
+        },
+    },
+    '만색의 예지': {
+        'Type': 'Passive',
+        'Description': '보유 시 INT가 상승한다',
+        'Style': 'default',
+        'Passive': {
+            'effect_type': 'constant',
+            'effects': {
+                'stats': {
+                    1: {'INT': 3},
+                    2: {'INT': 6},
+                    3: {'INT': 9},
+                },
+            },
+        },  
+    },
+    
+    # 단순 스탯 % 증가
     '견고': {
         'Type': 'Passive',
         'Description': '보유 시 RES% 가 증가한다',
@@ -1195,24 +1235,24 @@ SKILL_PROPERTIES = {
     # --- 패시브 - 조건부 --- #
     '무념의 기보': {
         # 필수 속성
-        'Type': 'Passive',           # Passive / Active
-        'Description': '보유 시 {threshold}턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.',    # 스킬 설명
-        'Style' : 'purple',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        'Type': 'Passive',
+        'Description': '보유 시 {threshold}턴 동안 마법을 사용하지 않을 시 Mov가 1 상승한다.',
+        'Style' : 'purple', 
         # 패시브 스킬 속성
         'Passive': {
-            'effect_type': 'conditional',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
-            'condition': {        # conditional일 경우
-                'target': 'self',     # self / allies / enemies
-                'stat': 'Turn_Without_Magic',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
-                'check_type': ['Equal','More'], # ['equal', 'more', 'less'] 중 해당되는 것들
-                'threshold': {                  # 검사
+            'effect_type': 'conditional',
+            'condition': {     
+                'target': 'self',  
+                'stat': 'Turn_Without_Magic',  
+                'check_type': ['Equal','More'],
+                'threshold': {   
                     1: 4,
                     2: 3,
                     3: 2,
                     },   
             },
             'effects': {
-                'stats': {       # 영구 스탯 증가
+                'stats': {
                     1 : {'Mov' : 1},
                     2 : {'Mov' : 1},
                     3 : {'Mov' : 1},
@@ -1221,31 +1261,29 @@ SKILL_PROPERTIES = {
         },
     },
     '불굴의 의지': {
-        'Type': 'Passive',           # Passive / Active
-        'Description': '보유 시 HP가 {threshold}% 이하이면 STR%이 증가한다.',    # 스킬 설명
-        'Style' : 'red',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        'Type': 'Passive',
+        'Description': '보유 시 HP가 {threshold}% 이하이면 STR%이 증가한다.',
+        'Style' : 'red',
         # 패시브 스킬 속성
         'Passive': {
-            'effect_type': 'conditional',    # constant(상시 적용) / conditional(조건 적용) / support(응원 적용)
-            'condition': {        # conditional일 경우
-                'target': 'self',     # self / allies / enemies
-                'stat': 'HP_ratio',       # 체크할 스탯 (activate_condition 또는 stats에서 체크)
-                'check_type': ['Equal','Less'], # ['equal', 'more', 'less'] 중 해당되는 것들
+            'effect_type': 'conditional', 
+            'condition': { 
+                'target': 'self',  
+                'stat': 'HP_ratio',  
+                'check_type': ['Equal','Less'], 
                 'threshold': {
                     1: 50,
                     2: 50,
                     3: 50,
-                    },  # 검사
+                    }, 
                   
             },
             'effects': {
-                     # 영구 스탯 증가
                 'stats_%': {
                     1 : {'STR' : 10},
                     2 : {'STR' : 15},
                     3 : {'STR' : 20},
-                    },   # 퍼센트 기반 스탯 증가
-                    # 상태이상 부여
+                    },
             }
         },
     },
@@ -1278,210 +1316,163 @@ SKILL_PROPERTIES = {
     },
     '근접 방어 태세': {
         # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다',    # 스킬 설명
-        'Style' : 'purple',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
+        'Type': 'Active',    
+        'Description': '사용 시, 다음 자신 페이즈까지 받는 근접 피해량%을 줄인다',  
+        'Style' : 'purple', 
         # 액티브 스킬 속성
         'Active': {
-            'type': 'skill',        # skill / magic
+            'type': 'skill',  
             'skill_type' : 'buff_temp',
-            'range_type' : '',      # diamond / linear / cross / square / ...
-            'range': {},            # 레벨별 사거리
-            'target_team': ['Self'],      # self / allies / enemies
-            'target_option' : 'one',   # one / all / part
-            'area' : {},            # 타격 범위
-            'mp_cost': {},      # 레벨별 MP 소모량
-            'cast_animation': 'MAGIC_CIRCLE', # 시전 애니메이션
-            'effect_animation': 'AURA', # 효과 애니메이션
-            # 'hit_animation': '',   # 타격 애니메이션
-            # 'Dmg_timing': 400,     # 데미지 적용 타이밍
-            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
-             # 효과 관련
+            'range_type' : '',  
+            'range': {},        
+            'target_team': ['Self'],    
+            'target_option' : 'one',
+            'area' : {},        
+            'mp_cost': {}, 
+            'cast_animation': 'MAGIC_CIRCLE',
+            'effect_animation': 'AURA',
+            'animate_type' : 'default', 
             'effects': {
-                'stats': {     # 고정 스탯 변화량
+                'stats': { 
                     1: {'Melee_def_mul' : -0.4},
                     2: {'Melee_def_mul' : -0.6},
                     3: {'Melee_def_mul' : -0.7},
                 },
-
-                'duration': 3    # 지속시간 (턴)
+                'duration': 3 
             },
         }
     },
 
     # --- 액티브 - 매직 스킬 --- #
     '아이스1': {
-        # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '{range}칸 내 하나에게 얼음 공격을 가한다',    # 스킬 설명
-        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
-        # 액티브 스킬 속성
+        'Type': 'Active',      
+        'Description': '{range}칸 내 하나에게 얼음 공격을 가한다', 
+        'Style' : 'magic', 
         'Active': {
-            'type': 'magic',        # skill / magic
+            'type': 'magic', 
             'skill_type' : '',
-            # 범위 관련
-            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
-            'range': {1:4, 2:5, 3:6},            # 레벨별 사거리
-            'target_team': ['Ally','Enemy'],      # self / allies / enemies
-            'target_option' : 'one',   # one / all / part
-            
-            # 시전 관련
-            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
-    
-            # 애니메이션 관련
-            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
-            'effect_animation': 'ICE2', # 효과 애니메이션
-            # 'hit_animation': '',   # 타격 애니메이션
-            'Dmg_timing': 400,     # 데미지 적용 타이밍
-            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
-             # 효과 관련
+            'range_type' : 'diamond', 
+            'range': {1:4, 2:5, 3:6},   
+            'target_team': ['Ally','Enemy'],  
+            'target_option' : 'one', 
+
+            'mp_cost': {1:20, 2:25, 3:30}, 
+            'cast_animation': 'MAGIC_CIRCLE2', 
+            'effect_animation': 'ICE2',
+            'Dmg_timing': 400,
+            'animate_type' : 'default',
             'damage': {
-                'dmg_type': 'magical',  # physical / magical / heal / None
-                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
+                'dmg_type': 'magical',
+                'dmg_coef': {1:35, 2:45, 3:60},
             },
             'effects': {
-                     # 고정 스탯 변화량
-                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},    # 상태이상 및 확률
-                'duration': 2    # 지속시간 (턴)
+                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},
+                'duration': 2 
             }
         }
     },
     '아이스2': {
-        # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '전방 {range}칸 내의 모두에게 얼음 공격을 가한다',    # 스킬 설명
-        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
-        # 액티브 스킬 속성
+        'Type': 'Active', 
+        'Description': '전방 {range}칸 내의 모두에게 얼음 공격을 가한다',
+        'Style' : 'magic',
         'Active': {
-            'type': 'magic',        # skill / magic
+            'type': 'magic',
             'skill_type' : '',
-            # 범위 관련
-            'range_type' : 'linear',      # diamond / linear / cross / square / ...
-            'range': {1:5, 2:6, 3:7},            # 레벨별 사거리
-            'target_team': ['Ally','Enemy'],      # self / Ally / Enemy
-            'target_option' : 'all',   # one / all / part
-            'area' : {},            # 타격 범위
-            
-            # 시전 관련
-            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
+            'range_type' : 'linear', 
+            'range': {1:5, 2:6, 3:7}, 
+            'target_team': ['Ally','Enemy'],
+            'target_option' : 'all',
+            'mp_cost': {1:20, 2:25, 3:30}, 
     
             # 애니메이션 관련
-            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
-            'effect_animation': 'ICE2', # 효과 애니메이션
-            # 'hit_animation': '',   # 타격 애니메이션
-            'Dmg_timing': 400,     # 데미지 적용 타이밍
-            'animate_type' : 'all_tiles', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
-             # 효과 관련
+            'cast_animation': 'MAGIC_CIRCLE2',
+            'effect_animation': 'ICE2', 
+            'Dmg_timing': 400,
+            'animate_type' : 'all_tiles', 
             'damage': {
-                'dmg_type': 'magical',  # physical / magical / heal / None
-                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
+                'dmg_type': 'magical',
+                'dmg_coef': {1:35, 2:45, 3:60},
             },
             'effects': {
-                     # 고정 스탯 변화량
-                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},    # 상태이상 및 확률
-                'duration': 2    # 지속시간 (턴)
+                'status': {1: {'동결' : 10}, 2: {'동결' : 10}, 3: {'동결' : 10},},
+                'duration': 2 
             }
         }
     },
     '번개 마법1': {
-        # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '{range}칸 내 자신을 제외한 모두에게 번개를 소환한다',    # 스킬 설명
-        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
-        # 액티브 스킬 속성
+        'Type': 'Active', 
+        'Description': '{range}칸 내 자신을 제외한 모두에게 번개를 소환한다',
+        'Style' : 'magic',
         'Active': {
-            'type': 'magic',        # skill / magic
+            'type': 'magic',
             'skill_type' : '',
-            # 범위 관련
-            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
-            'range': {1:3, 2:4, 3:5},            # 레벨별 사거리
-            'target_team': ['Ally','Enemy'],      # self / Ally / Enemy
-            'target_option' : 'all',   # one / all / part
-            'area' : {},            # 타격 범위
-            
-            # 시전 관련
-            'mp_cost': {1:20, 2:25, 3:30},      # 레벨별 MP 소모량
-    
-            # 애니메이션 관련
-            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
-            'effect_animation': 'THUNDER1', # 효과 애니메이션
-            # 'hit_animation': '',   # 타격 애니메이션
-            'Dmg_timing': 400,     # 데미지 적용 타이밍
-            'animate_type' : 'default', # default(타겟의 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
-             # 효과 관련
+            'range_type' : 'diamond',
+            'range': {1:3, 2:4, 3:5},
+            'target_team': ['Ally','Enemy'],
+            'target_option' : 'all',
+            'mp_cost': {1:20, 2:25, 3:30}, 
+            'cast_animation': 'MAGIC_CIRCLE2',
+            'effect_animation': 'THUNDER1', 
+            'Dmg_timing': 400,
+            'animate_type' : 'default',
             'damage': {
-                'dmg_type': 'magical',  # physical / magical / heal / None
-                'dmg_coef': {1:40, 2:50, 3:60},      # 레벨별 기본 데미지
+                'dmg_type': 'magical',
+                'dmg_coef': {1:40, 2:50, 3:60},
             },
             'effects': {
-                     # 고정 스탯 변화량
-                'status': {1: {'약화' : 30}, 2: {'약화' : 40}, 3: {'약화' : 50},},    # 상태이상 및 확률
-                'duration': 2    # 지속시간 (턴)
+                'status': {1: {'약화' : 30}, 2: {'약화' : 40}, 3: {'약화' : 50},},
+                'duration': 2
             }
         }
     },
     '불 마법1': {
-        # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '전방 {range}칸 내의 모두에게 불 공격을 한다.',    # 스킬 설명
-        'Style' : 'magic',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
-        # 액티브 스킬 속성
+        'Type': 'Active', 
+        'Description': '전방 {range}칸 내의 모두에게 불 공격을 한다.',
+        'Style' : 'magic',
         'Active': {
             'type': 'magic',
-            'skill_type' : 'attack',     
-            
-            # 범위 관련
-            'range_type' : 'linear',      # diamond / linear / cross / square / ...
+            'skill_type' : 'attack',    
+            'range_type' : 'linear',
             'range': {            
                 1: 5,
                 2: 6,
                 3: 7,
-                },            # 레벨별 사거리
-            'target_team': ['Ally','Enemy'],      # Self(자신) / Ally(자신을 제외한 아군) / Enemy(적군)
-            'target_option' : 'all',   # one / all / part
+                },
+            'target_team': ['Ally','Enemy'],
+            'target_option' : 'all',
             'mp_cost': {            
                 1: 20,
                 2: 25,
                 3: 30,
                 },
-    
-            # 애니메이션 관련
-            'cast_animation': 'MAGIC_CIRCLE', # 시전 애니메이션
-            'effect_animation': 'FIRE1', # 효과 애니메이션
-            'Dmg_timing': 0.4,     # 데미지 적용 타이밍
-            'animate_type' : 'sequential', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+            'cast_animation': 'MAGIC_CIRCLE',
+            'effect_animation': 'FIRE1',
+            'Dmg_timing': 0.4,
+            'animate_type' : 'sequential',
             'sequential' : {
               'tick' : 0.15,
             },    
-            # 효과 관련
             'damage': {
-                'dmg_type': 'magical',  # physical / magical / heal / None
-                'dmg_coef': {1:35, 2:45, 3:60},      # 레벨별 기본 데미지
+                'dmg_type': 'magical',
+                'dmg_coef': {1:35, 2:45, 3:60},
             },
             'damage_divide' : {
                 'enable' : False,
-                'damage_divided_count' : 0,  # 타격 시 데미지 분할 여부
+                'damage_divided_count' : 0,
                 'divide_tick' : 0,
                 },
             'effects': {
-                     # 고정 스탯 변화량
-                    # 상태이상 및 확률
-                'duration': 0    # 지속시간 (턴)
             }
         }
     },
 
     '오버드라이브1': {
-        # 필수 속성
         'Type': 'Active',  
-        'Description': '{range}칸 내의 2칸 이내 지역에 빛 공격을 한다.',    # 스킬 설명
-        'Style' : 'red',   
-        # 액티브 스킬 속성
+        'Description': '{range}칸 내의 2칸 이내 지역에 빛 공격을 한다.',
+        'Style' : 'red',
         'Active': {
-            'type': 'magic',
-            'skill_type' : 'attack',     
-            
-            # 범위 관련
+            'type': 'overdrive',
+            'skill_type' : 'attack',
             'range_type' : 'diamond',  
             'range': {            
                 1: 4,
@@ -1497,11 +1488,6 @@ SKILL_PROPERTIES = {
             },
             'target_team': ['Self','Ally','Enemy'], 
             'target_option' : 'part', 
-            'mp_cost': {            
-                1: 20,
-                2: 25,
-                3: 30,
-                },
             'cast_animation': 'MAGIC_CIRCLE',
             'effect_animation': 'HOLY_LIGHT',
             'Dmg_timing': 1200,
@@ -1510,34 +1496,25 @@ SKILL_PROPERTIES = {
                 'dmg_type': 'magical',
                 'dmg_coef': {1:60, 2:80, 3:110},
             },
-            'effects': {
-                  
-                 
-                'duration': 0 
-            }
+
         }
     },
     # --- 액티브 - 서포트 스킬 --- #
     '힐링': {
-        # 필수 속성
-        'Type': 'Active',           # Passive / Active
-        'Description': '아군 한 명의 체력을 회복시킨다.',    # 스킬 설명
-        'Style' : 'support',    # 스킬 UI에서의 색상 표시(default, magic, support, red, purple. 추후 스타일 수정 예정)
-        # 액티브 스킬 속성
+        'Type': 'Active',
+        'Description': '아군 한 명의 체력을 회복시킨다.',
+        'Style' : 'support',
         'Active': {
-            'type': 'magic',        # skill / magic
-            'skill_type' : 'heal',      # attack / support / heal / buff / buff_temp / debuff / summon
-            
-            # 범위 관련
-            'range_type' : 'diamond',      # diamond / linear / cross / square / ...
+            'type': 'magic',
+            'skill_type' : 'heal',
+            'range_type' : 'diamond',
             'range': {            
                 1: 2,
                 2: 3,
                 3: 3
-                },            # 레벨별 사거리
-            'target_team': ['Ally'],      # Self(자신) / Ally(자신을 제외한 아군) / Enemy(적군)
-            'target_option' : 'one',   # one / all / part
-            # 시전 관련
+                },
+            'target_team': ['Ally'],
+            'target_option' : 'one',
             'mp_cost': {
                 1: 30,
                 2: 40,
@@ -1545,12 +1522,12 @@ SKILL_PROPERTIES = {
                 },
     
             # 애니메이션 관련
-            'cast_animation': 'MAGIC_CIRCLE2', # 시전 애니메이션
-            'effect_animation': 'HOLY_CROSS', # 효과 애니메이션
-            'Dmg_timing': 500,     # 데미지 적용 타이밍
-            'animate_type' : 'default', # default(선택 타일에 1회), all_tiles(모든 타일에 1회), sequential(모든 타일을 특정 순서대로)
+            'cast_animation': 'MAGIC_CIRCLE2',
+            'effect_animation': 'HOLY_CROSS',
+            'Dmg_timing': 500,
+            'animate_type' : 'default',
             'damage': {
-                'dmg_type': 'heal',  # physical / magical / heal / None
+                'dmg_type': 'heal',
                 'dmg_coef': {
                     1:25,
                     2:40,
@@ -1558,9 +1535,7 @@ SKILL_PROPERTIES = {
                     },
                 },
             'effects': {
-                     # 고정 스탯 변화량
-                    # 상태이상 및 확률
-                'duration': 0    # 지속시간 (턴)
+                'duration': 0
             }
         }
     },
@@ -1680,6 +1655,136 @@ EQUIP_PROPERTIES = {
         'STAT' : {},
     },
 
+}
+CARD_PROPERTIES = {
+    'Common': [
+        {'title': '무도의 진수',
+         'desc': 'STR이 3 증가한다. ',
+            'act': {
+                'skill': {'무도의 진수': 1}
+            }
+         },
+        {'title': '만색의 예지',
+         'desc': 'INT가 3 증가한다. ',
+         'act': {
+             'skill': {'만색의 예지': 1}
+             }
+         },
+        {'title': '신중함',
+         'desc': '명중률이 10% 증가한다.',
+        'act': {
+            'skill': {'신중함': 1}
+            }
+        },
+        {'title': '인과응보',
+         'desc': '반격 데미지가 15% 증가한다.',
+         'act': {
+             'skill': {'인과응보': 1}
+             }
+         },
+        {'title': '라이온 하트',
+         'desc': 'CHA 상승률이 15% 증가한다.',
+         'act': {
+             'skill': {'라이온 하트': 1}
+             }
+         },
+
+        {'title': '아마데우스',
+         'desc': '경험치 획득량 %이 증가한다.',
+         'act': {
+             'skill': {'아마데우스': 1}
+             }
+         },
+        
+    ],
+    'Uncommon': [
+        {'title': '체력 단련',
+         'desc': '최대 HP가 10% 증가한다.',
+         'act': {
+             'skill': {'체력 단련': 1}
+             }
+         },
+        {'title': '마력 운용',
+         'desc': '최대 MP가 15% 증가한다.',
+         'act': {
+             'skill': {'마력 운용': 1}
+             }
+         },
+        {'title': '강력',
+         'desc': 'STR이 20% 증가한다.',
+         'act': {
+             'skill': {'강력': 1}
+             }
+         },
+        {'title': '견고',
+         'desc': 'RES가 20% 증가한다.',
+         'act': {
+             'skill': {'견고': 1}
+             }
+         },
+        {'title': '축지의 비기',
+         'desc': '이동력이 1 증가한다.',
+         'act': {
+             'skill': {'축지의 비기': 1}
+             }
+         },
+        {'title': '야전 의료',
+         'desc': 'HP %를 지속적으로 회복한다.',
+         'act': {
+             'skill': {'야전 의료': 1}
+             }
+         },
+                {'title': '회피기동',
+         'desc': '회피율이 15% 증가한다.',
+         'act': {
+             'skill': {'회피기동': 1}
+             }
+         },
+        {'title': '마력 반환',
+         'desc': 'MP %를 지속적으로 회복한다.',
+         'act': {
+             'skill': {'마력 반환': 1}
+             }
+         },
+    ],
+    'Rare': [
+        {'title': '생명의 축복',
+         'desc': '최대 HP가 25% 증가하고, 매 턴마다 HP가 2% 회복된다.',
+         'act': {
+             'skill': {'생명의 축복': 1}
+             }
+         },
+        {'title': '마력의 지배자',
+         'desc': '최대 MP가 30% 증가하고, 스킬 소모 MP가 15% 감소한다.',
+         'act': {
+             'skill': {'마력의 지배자': 1}
+             }
+         },
+        {'title': '전투의 대가',
+         'desc': 'STR이 35% 증가하고, 크리티컬 확률이 10% 증가한다.',
+         'act': {
+             'skill': {'전투의 대가': 1}
+             }
+         },
+        {'title': '불굴의 의지',
+         'desc': 'RES가 35% 증가하고, 받는 피해가 10% 감소한다.',
+         'act': {
+             'skill': {'불굴의 의지': 1}
+             }
+         },
+        {'title': '현자의 지혜',
+         'desc': 'INT가 35% 증가하고, 모든 속성 피해가 15% 증가한다.',
+         'act': {
+             'skill': {'현자의 지혜': 1}
+             }
+         },
+        {'title': '카리스마의 귀공',
+         'desc': 'CHA가 35% 증가하고, 아군 버프 효과가 20% 증가한다.',
+         'act': {
+             'skill': {'카리스마의 귀공': 1}
+             }
+         }
+    ],
 }
 SOUND_PROPERTIES = {
     'CURSOR_CLICK': {
