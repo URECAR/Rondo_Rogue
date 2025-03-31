@@ -155,6 +155,7 @@ class AI():
                     print("경로를 찾을 수 없습니다.")
             else:
                 print("감지된 타겟이 없습니다.")
+                return '턴종료'
                 
             # print('접근 모드로 전환')
         self.result_temp_move_roots = temp_move_roots
@@ -204,8 +205,6 @@ class AI():
             target_battler = attackable_target[0]
         if target_battler:
             self.map_action.target_battler = target_battler
-            # self.level.cursor.rect.center = self.selected_battler.gfx_rect.center
-            # self.level.cursor = self.selected_battler.pos
             self.level.visible_sprites.focus_on_target(self.selected_battler)
             self.map_action.selected_battler.update_facing_direction(target_battler.pos - self.map_action.selected_battler.pos)
             self.map_action.selected_battler.actlist.append('range_attack')
@@ -218,28 +217,26 @@ class AI():
             for battler in [battler for battler in self.level.battler_sprites if battler.team != self.selected_battler.team]:
                 if sum(abs(c) for c in (self.selected_battler.pos - battler.pos)) < Sense_Enemy:
                     Sensable_Enemies.append(battler)
-            MAX_CHA_battler = max(Sensable_Enemies, key=lambda battler: battler.stats["CHA"])
-            path = self.map_action.find_approach_path(self.selected_battler.pos, MAX_CHA_battler.pos, self.selected_battler.stats["Mov"], Sense_Enemy + 5)
-            if path and len(path) > 1:
-                route = path[0][1]  # path[0]은 첫 번째 경로, [1]은 좌표 리스트
-                cur_moves = self.selected_battler.stats["Mov"]
-                valid_route = []
-                # print(path)
-                for pos, cost in route[1:]:  # 시작점 제외
-                    if cost <= cur_moves and sum(abs(c) for c in (pos - battler.pos)) >= attack_range:
-                        # print(self.map_action.get_tiles_in_line(self.selected_battler.pos,self.selected_battler.pos + pygame.math.Vector2(tiledxdy)))
-                        valid_route.append(pygame.math.Vector2(pos))
-                    else:
-                        break
-                self.result_temp_move_roots = valid_route
-                return '이동'
-                
-                # 경로가 있으면 실행
-                # if self.result_temp_move_roots:
-                #     return
-            else:
-                self.map_action.endturn()
-                return '턴종료'
+                    
+            # 감지된 적이 있는 경우에만 가장 높은 CHA를 가진 적에게 접근
+            if Sensable_Enemies:
+                MAX_CHA_battler = max(Sensable_Enemies, key=lambda battler: battler.stats["CHA"])
+                path = self.map_action.find_approach_path(self.selected_battler.pos, MAX_CHA_battler.pos, self.selected_battler.stats["Mov"], Sense_Enemy + 5)
+                if path and len(path) > 1:
+                    route = path[0][1]  # path[0]은 첫 번째 경로, [1]은 좌표 리스트
+                    cur_moves = self.selected_battler.stats["Mov"]
+                    valid_route = []
+                    for pos, cost in route[1:]:  # 시작점 제외
+                        if cost <= cur_moves and sum(abs(c) for c in (pos - MAX_CHA_battler.pos)) >= attack_range:
+                            valid_route.append(pygame.math.Vector2(pos))
+                        else:
+                            break
+                    self.result_temp_move_roots = valid_route
+                    return '이동'
+                    
+            # 감지된 적이 없거나 경로를 찾지 못한 경우
+            self.map_action.endturn()
+            return '턴종료'
             
     def delete_movable_tiles(self,object,filter_target):
         object_pos_list = {pos for pos, value in filter_target if value != 0}

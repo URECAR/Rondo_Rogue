@@ -5,7 +5,7 @@ from tile import Tile
 from database import *
 from collections import deque
 import random
-from support import SoundManager, InputManager, EffectManager, Effect
+from support import SoundManager, InputManager, EffectManager, Effect, TimerManager
 from ai import AI
 from ui import ConfirmationDialog
 from states import *
@@ -45,6 +45,7 @@ class MapAction:
         self.input_manager = InputManager()  # input_manager로 이름 변경
         self.sound_manager = SoundManager()
         self.effect_manager = EffectManager()
+        self.timer = TimerManager()
         self.AI = AI(self)
         self.update_time = 0
         self.step_enemy_turns = False

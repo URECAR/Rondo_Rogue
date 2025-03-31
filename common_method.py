@@ -6,6 +6,8 @@ import pygame
 
 def is_adjacent(battler1, battler2):
 # 두 배틀러가 서로 붙었는 지 확인
+    if battler1 is None or battler2 is None:
+        return False
     dx = abs(battler1.pos.x - battler2.pos.x)
     dy = abs(battler1.pos.y - battler2.pos.y)
 

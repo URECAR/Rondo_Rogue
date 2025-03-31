@@ -577,6 +577,7 @@ class EffectManager:
                     for stat, value in effect.effects.items():
                         if stat in battler.stats:
                             battler.stats[stat] += value
+
 class MessageDialog:
     def __init__(self, messages, font, level):
         self.messages = messages
@@ -669,3 +670,51 @@ class MessageDialog:
                 self.is_instant = True
 
         return None
+
+class TimerManager:
+    """전역 시간 관리 시스템"""
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TimerManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self.timers = {}
+        self._initialized = True
+        
+    def __call__(self, name, duration=None):
+        """타이머 시작 또는 체크
+        
+        사용법:
+        # 타이머 시작
+        timer_manager('melee_attack', 500)
+        
+        # 타이머 체크
+        if timer_manager('melee_attack'):
+            # 타이머 완료됨
+        """
+        current_time = pygame.time.get_ticks()
+        
+        # 새 타이머 시작
+        if duration is not None:
+            self.timers[name] = {
+                "start": current_time,
+                "duration": duration
+            }
+            return False
+            
+        # 기존 타이머 체크
+        if name not in self.timers:
+            return True
+            
+        # 타이머 완료 체크
+        timer = self.timers[name]
+        if current_time - timer["start"] >= timer["duration"]:
+            del self.timers[name]
+            return True
+        return False

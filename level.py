@@ -33,136 +33,217 @@ class Level:
         self.create_map2()
         self.map_action = MapAction(self)  # MapAction 인스턴스 생성
     def create_map2(self):
-        # 맵 데이터 로드
-        map_data = {
-            'layer1': import_csv_layout('../map2/map2._Layer1.csv'),
-            'layer2': import_csv_layout('../map2/map2._Layer2.csv'),
-            'layer3': import_csv_layout('../map2/map2._Layer3.csv'),
-            'layerAbove': import_csv_layout('../map2/map2._LayerAbove.csv'),
-            'tree': import_csv_layout('../map2/map2._Tree.csv'),
-            'move_data': import_csv_layout('../map2/map2._Move_Data.csv'),
-            'range_data': combine_range_csvs(['../map2/map2._Range_Up.csv',
-                                               '../map2/map2._Range_UpRight.csv',
-                                               '../map2/map2._Range_Right.csv',
-                                               '../map2/map2._Range_RightDown.csv',
-                                               '../map2/map2._Range_Down.csv',
-                                               '../map2/map2._Range_DownLeft.csv',
-                                               '../map2/map2._Range_Left.csv',
-                                               '../map2/map2._Range_LeftUp.csv',])
-        }
-        
-        # 타일셋 로드
-        tileset = pygame.image.load('../map2/tileset.png').convert_alpha()
-        tileset_width = tileset.get_width() // TILESIZE
-        
-        # 타일셋에서 타일 이미지 추출
-        tile_images = {}
-        for tile_id in range(tileset_width * (tileset.get_height() // TILESIZE)):
-            x = (tile_id % tileset_width) * TILESIZE
-            y = (tile_id // tileset_width) * TILESIZE
-            tile_images[str(tile_id)] = tileset.subsurface((x, y, TILESIZE, TILESIZE))
-
-        # moves 데이터 처리
-        
+            # 맵 데이터 로드
+            map_data = {
+                'layer1': import_csv_layout('../map2/map2._Layer1.csv'),
+                'layer2': import_csv_layout('../map2/map2._Layer2.csv'),
+                'layer3': import_csv_layout('../map2/map2._Layer3.csv'),
+                'layerAbove': import_csv_layout('../map2/map2._LayerAbove.csv'),
+                'tree': import_csv_layout('../map2/map2._Tree.csv'),
+                'move_data': import_csv_layout('../map2/map2._Move_Data.csv'),
+                'range_data': combine_range_csvs([
+                    '../map2/map2._Range_Up.csv',
+                    '../map2/map2._Range_UpRight.csv',
+                    '../map2/map2._Range_Right.csv',
+                    '../map2/map2._Range_RightDown.csv',
+                    '../map2/map2._Range_Down.csv',
+                    '../map2/map2._Range_DownLeft.csv',
+                    '../map2/map2._Range_Left.csv',
+                    '../map2/map2._Range_LeftUp.csv',
+                ])
+            }
             
-        self.level_data = {
-            'Map_Max_x': self.visible_sprites.Mapmax.x,
-            'Map_Max_y': self.visible_sprites.Mapmax.y,
-            'moves': [['-1' if map_data['move_data'][y][x] == '0' else map_data['move_data'][y][x] 
-                    for y in range(len(map_data['move_data']))] 
-                    for x in range(len(map_data['move_data'][0]))],
-            'ranges': [[map_data['range_data'][y][x]
-                    for y in range(len(map_data['range_data']))]
-                    for x in range(len(map_data['range_data'][0]))]
-        }
-        # Layer1과 LayerAbove를 위한 Surface 생성
-        layer1_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
-        layerAbove_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
-        # Layer1 렌더링
-        for row_index, row in enumerate(map_data['layer1']):
-            for col_index, tile_id in enumerate(row):
-                if tile_id != '-1':
-                    x = col_index * TILESIZE
-                    y = row_index * TILESIZE
-                    tile_image = tile_images[tile_id]
-                    layer1_surface.blit(tile_image, (x, y))
-
-        # LayerAbove 렌더링
-        for row_index, row in enumerate(map_data['layerAbove']):
-            for col_index, tile_id in enumerate(row):
-                if tile_id != '-1':
-                    x = col_index * TILESIZE
-                    y = row_index * TILESIZE
-                    tile_image = tile_images[tile_id]
-                    layerAbove_surface.blit(tile_image, (x, y))
-
-        # Layer1과 LayerAbove를 단일 스프라이트로 생성
-        layer1_sprite = Tile((0, 0),[self.visible_sprites],'layer1',layer1_surface)
-        layer1_sprite.priority = 0  # 최하단 레이어
-
-        layerAbove_sprite = Tile((0, 0),[self.visible_sprites],'layerAbove',layerAbove_surface)
-        layerAbove_sprite.priority = self.level_data['Map_Max_y']  # 최상단 레이어
-
-        # Layer2와 Layer3는 개별 타일로 생성
-        for layer_name in ['layer2', 'layer3']:
-            for row_index, row in enumerate(map_data[layer_name]):
+            # 타일셋 로드
+            tileset = pygame.image.load('../map2/tileset.png').convert_alpha()
+            tileset_width = tileset.get_width() // TILESIZE
+            
+            # 타일셋에서 타일 이미지 추출
+            tile_images = {}
+            for tile_id in range(tileset_width * (tileset.get_height() // TILESIZE)):
+                x = (tile_id % tileset_width) * TILESIZE
+                y = (tile_id // tileset_width) * TILESIZE
+                tile_images[str(tile_id)] = tileset.subsurface((x, y, TILESIZE, TILESIZE))
+                
+            self.level_data = {
+                'Map_Max_x': self.visible_sprites.Mapmax.x,
+                'Map_Max_y': self.visible_sprites.Mapmax.y,
+                'moves': [['-1' if map_data['move_data'][y][x] == '0' else map_data['move_data'][y][x] 
+                        for y in range(len(map_data['move_data']))] 
+                        for x in range(len(map_data['move_data'][0]))],
+                'ranges': [[map_data['range_data'][y][x]
+                        for y in range(len(map_data['range_data']))]
+                        for x in range(len(map_data['range_data'][0]))]
+            }
+            
+            # Layer1과 LayerAbove를 위한 Surface 생성
+            layer1_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
+            layerAbove_surface = pygame.Surface((self.level_data['Map_Max_x'], self.level_data['Map_Max_y']), pygame.SRCALPHA)
+            
+            # Layer1 렌더링
+            for row_index, row in enumerate(map_data['layer1']):
                 for col_index, tile_id in enumerate(row):
                     if tile_id != '-1':
                         x = col_index * TILESIZE
                         y = row_index * TILESIZE
-                        groups = [self.visible_sprites]
+                        tile_image = tile_images[tile_id]
+                        layer1_surface.blit(tile_image, (x, y))
 
-                        tile = Tile((x, y),groups,layer_name,tile_images[tile_id],tile_id=int(tile_id))
+            # LayerAbove 렌더링
+            for row_index, row in enumerate(map_data['layerAbove']):
+                for col_index, tile_id in enumerate(row):
+                    if tile_id != '-1':
+                        x = col_index * TILESIZE
+                        y = row_index * TILESIZE
+                        tile_image = tile_images[tile_id]
+                        layerAbove_surface.blit(tile_image, (x, y))
 
-                        # Layer별 priority 설정
-                        if layer_name == 'layer2':
-                            tile.priority = y
-                        else:  # layer3
-                            tile.priority = y + 2 * TILESIZE
-        # 나무 레이어 처리
-        for row_index, row in enumerate(map_data['tree']):
-            for col_index, tile_id in enumerate(row):
-                if tile_id in ['339', '730']:  # 트리의 시작점인 경우만 처리
-                    x = col_index * TILESIZE
-                    y = row_index * TILESIZE
-                    TreeSprite((x, y), [self.visible_sprites, self.tree_sprites], 'tree', tileset, int(tile_id))
+            # Layer1과 LayerAbove를 단일 스프라이트로 생성
+            layer1_sprite = Tile((0, 0), [self.visible_sprites], 'layer1', layer1_surface)
+            layer1_sprite.priority = 0  # 최하단 레이어
 
-        self.panorama_background = PanoramaBackground(self)
-        self.visible_sprites.add(self.panorama_background)
+            layerAbove_sprite = Tile((0, 0), [self.visible_sprites], 'layerAbove', layerAbove_surface)
+            layerAbove_sprite.priority = self.level_data['Map_Max_y']  # 최상단 레이어
 
-        # 배틀러 생성
-        self.battlers = {}
-        spawn_order = list(MAP1.spawns.keys())
-        
-        for char_type in spawn_order:
-            self.battlers[char_type] = self.spawn_battler(char_type)
-        
-        # self.battlers['Piglin2'] = self.spawn_battler('Piglin', offset=[0,1])
-        
-        # 커서는 첫 배틀러 위치에 생성
-        first_battler = self.battlers[spawn_order[0]]
-        self.cursor = Cursor((first_battler.pos.x, first_battler.pos.y),[self.visible_sprites],self)
-        
-    def spawn_battler(self, char_type, offset=[0,0], team=None):
-        """배틀러 생성 함수"""
-        if char_type not in MAP1.spawns:
-            raise ValueError(f"Unknown character type: {char_type}")
+            # Layer2와 Layer3는 개별 타일로 생성
+            for layer_name in ['layer2', 'layer3']:
+                for row_index, row in enumerate(map_data[layer_name]):
+                    for col_index, tile_id in enumerate(row):
+                        if tile_id != '-1':
+                            x = col_index * TILESIZE
+                            y = row_index * TILESIZE
+                            groups = [self.visible_sprites]
+
+                            tile = Tile((x, y), groups, layer_name, tile_images[tile_id], tile_id=int(tile_id))
+
+                            # Layer별 priority 설정
+                            if layer_name == 'layer2':
+                                tile.priority = y
+                            else:  # layer3
+                                tile.priority = y + 2 * TILESIZE
+                                
+            # 나무 레이어 처리
+            for row_index, row in enumerate(map_data['tree']):
+                for col_index, tile_id in enumerate(row):
+                    if tile_id in ['339', '730']:  # 트리의 시작점인 경우만 처리
+                        x = col_index * TILESIZE
+                        y = row_index * TILESIZE
+                        TreeSprite((x, y), [self.visible_sprites, self.tree_sprites], 'tree', tileset, int(tile_id))
+
+            self.panorama_background = PanoramaBackground(self)
+            self.visible_sprites.add(self.panorama_background)
+
+            # 기본 배틀러(spawn_order=1) 생성
+            self.battlers = []
+            self.spawn_battlers(1)
             
-        spawn_data = MAP1.spawns[char_type]
-        spawn_x = spawn_data['Spawn'][0] + offset[0]
-        spawn_y = spawn_data['Spawn'][1] + offset[1]
+            # 첫 번째 아군 배틀러의 위치에 커서 생성
+            ally_battlers = [b for b in self.battlers if b.team == 'Ally']
+            if ally_battlers:
+                first_battler = ally_battlers[0]
+                self.cursor = Cursor((first_battler.pos.x, first_battler.pos.y), [self.visible_sprites], self)
         
-        # team이 지정되지 않으면 base_team 사용
-        battler_team = team if team else spawn_data['base_team']
+    def spawn_battlers(self, spawn_order):
+        """
+        특정 spawn_order를 가진 모든 배틀러를 스폰
+        spawn_order: 스폰 순서 (1: 기본 스폰, 2/3/4: 추가 스폰)
+        """
+        # battlers 리스트가 없으면 초기화
+        if not hasattr(self, 'battlers'):
+            self.battlers = []
+
+        # 해당 spawn_order를 가진 모든 spawn_id 찾기
+        spawn_ids = [
+            spawn_id for spawn_id, data in MAP1.spawns.items() 
+            if data['spawn_order'] == spawn_order
+        ]
         
+        # 아군 먼저 스폰하기 위해 정렬
+        spawn_ids.sort(key=lambda x: MAP1.spawns[x]['team'] != 'Ally')
+        
+        # 각 spawn_id에 대해 배틀러 생성
+        for spawn_id in spawn_ids:
+            spawn_data = MAP1.spawns[spawn_id]
+            
+            # 팀과 캐릭터 타입 가져오기
+            team = spawn_data['team']
+            char_type = spawn_data['char_type']
+            
+            # 스폰 위치 결정
+            if team == 'Ally' and 'spawn_pos' not in spawn_data:
+                # 아군이고 스폰 위치가 지정되지 않은 경우 ally_spawn_points 사용
+                ally_count = len([b for b in self.battlers if b.team == 'Ally'])
+                spawn_index = ally_count % len(MAP1.ally_spawn_points)
+                spawn_x = MAP1.ally_spawn_points[spawn_index][0]
+                spawn_y = MAP1.ally_spawn_points[spawn_index][1]
+            else:
+                # 적군이거나 스폰 위치가 지정된 경우
+                spawn_x = spawn_data['spawn_pos'][0]
+                spawn_y = spawn_data['spawn_pos'][1]
+            
+            # 배틀러 생성
+            battler = Character(
+                (spawn_x, spawn_y),
+                [self.visible_sprites, self.selectable_sprites, self.battler_sprites],
+                self.obstacle_sprites,
+                char_type=char_type,
+                team=team
+            )
+            
+            # 레벨 설정
+            battler.LV = spawn_data['level']
+            battler.base_team = team
+            
+            # battlers 리스트에 추가
+            self.battlers.append(battler)
+
+    def spawn_battler(self, spawn_id, offset=[0,0], team=None):
+        """
+        개별 배틀러 생성 함수
+        spawn_id: spawns 딕셔너리의 키 값
+        offset: 스폰 위치 오프셋 [x, y]
+        team: 선택적으로 팀 오버라이드
+        """
+        # battlers 리스트가 없으면 초기화
+        if not hasattr(self, 'battlers'):
+            self.battlers = []
+
+        if spawn_id not in MAP1.spawns:
+            raise ValueError(f"Unknown spawn ID: {spawn_id}")
+            
+        spawn_data = MAP1.spawns[spawn_id]
+        
+        # 팀과 캐릭터 타입 가져오기
+        base_team = spawn_data['team']
+        char_type = spawn_data['char_type']
+        
+        # 스폰 위치 결정
+        if base_team == 'Ally' and 'spawn_pos' not in spawn_data:
+            # 기존 아군 수 계산
+            ally_count = len([b for b in self.battlers if b.team == 'Ally'])
+            spawn_index = ally_count % len(MAP1.ally_spawn_points)
+            spawn_x = MAP1.ally_spawn_points[spawn_index][0] + offset[0]
+            spawn_y = MAP1.ally_spawn_points[spawn_index][1] + offset[1]
+        else:
+            # 적군이거나 스폰 위치가 지정된 경우
+            spawn_x = spawn_data['spawn_pos'][0] + offset[0]
+            spawn_y = spawn_data['spawn_pos'][1] + offset[1]
+        
+        # 배틀러 생성
         battler = Character(
             (spawn_x, spawn_y),
             [self.visible_sprites, self.selectable_sprites, self.battler_sprites],
             self.obstacle_sprites,
             char_type=char_type,
-            team=battler_team
+            team=team if team else base_team
         )
-        battler.base_team = spawn_data['base_team']
+        
+        # 레벨 설정
+        battler.LV = spawn_data['level']
+        battler.base_team = base_team
+        
+        # battlers 리스트에 추가
+        self.battlers.append(battler)
+        
         return battler
     
     def level_update(self):
@@ -196,11 +277,11 @@ class Level:
         self.map_action.update()
         self.ui.display()
         # debug(self.battlers['Player1'].effect_manager.get_active_effects(self),)
-        debug(self.battlers['Player3'].pose)
+        # debug(self.battlers['Player3'].pose)
         debug(self.cursor.pos, x = 150)
         debug(self.map_action.current_state, x = 70)
-        debug(self.battlers['Player1'].skills, y= 50)
-        debug(self.battlers['Player1'].effects, y= 70)
+        # debug(self.battlers['Player1'].skills, y= 50)
+        # debug(self.battlers['Player1'].effects, y= 70)
         debug([battler.OVD_progress for battler in self.battler_sprites], y= 90)
 
 class YSortCameraGroup(pygame.sprite.Group):

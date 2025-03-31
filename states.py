@@ -42,16 +42,12 @@ class Explore_State(State):
     def enter(self):
         if (not hasattr(self, 'event_triggered')
             and self.map_action.current_phase == 'Ally'
-            and "Player1" in self.level.battlers
-            and "Player2" in self.level.battlers
-            and is_adjacent(self.level.battlers["Player1"], self.level.battlers["Player2"])):
+            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player1'), None), next((b for b in self.level.battlers if b.char_type == 'Player2'), None))):
             self.event_triggered = True
             return ('event', 'Event1', 'explore')
         elif (not hasattr(self, 'event_triggered2')
-              and self.map_action.current_phase == 'Ally'
-              and "Player2" in self.level.battlers
-              and "Player3" in self.level.battlers
-              and is_adjacent(self.level.battlers["Player2"], self.level.battlers["Player3"])):
+            and self.map_action.current_phase == 'Ally'
+            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player2'), None), next((b for b in self.level.battlers if b.char_type == 'Player3'), None))):
             self.event_triggered2 = True
             return ('event', 'Event2', 'explore')
             
@@ -87,10 +83,10 @@ class Explore_State(State):
             if actable_enemies and not self.map_action.selected_battler:
                 self.map_action.selected_battler = actable_enemies[0]
                 self.level.visible_sprites.focus_on_target(self.map_action.selected_battler,cursor_obj=self.level.cursor)
-                self.map_action.update_time = pygame.time.get_ticks() + 500
+                self.map_action.timer('enemy_wait', 500)
                 self.substate = 'Enemy_wait'
                 return
-            elif self.substate == 'Enemy_wait' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'Enemy_wait' and self.map_action.timer('enemy_wait'):
                 self.substate = None
                 return self.map_action.AI.execute()
 class Look_Object_State(State):
@@ -225,22 +221,39 @@ class Player_Control_State(State):
 class Player_Moving_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
+
     def enter(self):
+        if not self.map_action.selected_battler:
+            # selected_battler가 None이면 explore 상태로 되돌아감
+            return 'explore'
+
         self.cursor.move_lock = True
         self.cursor.SW_select = False
         self.map_action.selected_battler.isfollowing_root = True
         self.map_action.Acted.append([None,'Move'])
+
     def exit(self):
-        self.map_action.selected_battler.isfollowing_root = False
+        if self.map_action.selected_battler:
+            self.map_action.selected_battler.isfollowing_root = False
+
     def update(self):
+        if not self.map_action.selected_battler:
+            return 'explore'
+
         if not self.map_action.selected_battler.isacting:
             for battler in self.level.battler_sprites:
-                if (battler != self.map_action.selected_battler and battler.pos == self.map_action.selected_battler.pos and battler.team == self.map_action.selected_battler.team and not battler in self.map_action.interacted_battlers):
+                if (battler != self.map_action.selected_battler and 
+                    battler.pos == self.map_action.selected_battler.pos and 
+                    battler.team == self.map_action.selected_battler.team and 
+                    not battler in self.map_action.interacted_battlers):
                     self.map_action.interacted_battlers.append(battler)
                     self.support(battler)
            # 이동해야할 경로가 존재함.
             if self.map_action.move_roots:
-                target_battlers = [battler for battler in self.level.battler_sprites if battler != self.map_action.selected_battler and battler not in self.map_action.interacted_battlers and battler.team != self.map_action.selected_battler.team]
+                target_battlers = [battler for battler in self.level.battler_sprites 
+                                if battler != self.map_action.selected_battler and 
+                                battler not in self.map_action.interacted_battlers and 
+                                battler.team != self.map_action.selected_battler.team]
                 if any(self.map_action.move_roots[0][0].pos == battler.pos for battler in target_battlers):      # 충돌 검사
                     for battler in target_battlers:
                         # 이동할 경로에 상호작용 안했던 배틀러가 존재
@@ -432,10 +445,10 @@ class Interact_State(State):
                 self.map_action.Acted.append([self.map_action.target_battler,'Melee'])
                 self.map_action.selected_battler.isfollowing_root = False
                 self.map_action.selected_battler.actlist.append('act_for_attack')
-                self.map_action.update_time = pygame.time.get_ticks() + self.map_action.selected_battler.attack_delay
+                self.map_action.timer('melee_attack0', self.map_action.selected_battler.attack_delay)
                 return 'interact','melee1'
 
-            elif self.substate == 'melee1' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'melee1' and self.map_action.timer('melee_attack0'):
                 # 공격 효과 계산 및 적용
                 attacker = self.map_action.selected_battler
                 target = self.map_action.target_battler
@@ -445,7 +458,7 @@ class Interact_State(State):
                 if CombatFormulas.check_melee_counter(self,attacker, target, vurnerable):
                     self.map_action.animation_manager.create_animation(attacker.collision_rect.center, 'EMOTE_SURPRISE', wait=True)
                     target.battle_return(attacker, move_type='counter')
-                    self.map_action.update_time = pygame.time.get_ticks() + 500
+                    self.map_action.timer('melee_counter', self.map_action.selected_battler.attack_delay)
                     return 'interact','melee_counter1'
                     
                 # 히트 체크
@@ -467,6 +480,7 @@ class Interact_State(State):
                 self.map_action.animation_manager.create_animation(target,'SLASH',wait=True)
                 target.battle_return(attacker, move_type='knockback')
                 self.map_action.Damage(attacker, target, damage, "Melee", is_critical = is_critical)
+                # ZOC 체크
                 if CombatFormulas.check_ZOC(self,attacker, target, vurnerable, is_critical):
                     self.map_action.animation_manager.create_animation(target,'SHIELD2',wait=True)
                     # 이동 취소
@@ -476,7 +490,7 @@ class Interact_State(State):
                         
                     return 'interact','melee_ZOC1'
                     
-                self.map_action.update_time = pygame.time.get_ticks() + self.map_action.selected_battler.attack_delay
+                self.map_action.timer('melee_attack1', self.map_action.selected_battler.attack_delay)
                 return 'interact','melee2'
     # - ZOC 발동 후 이동까지 대기 + 방어 애니메이션 완료까지 대기 (_attack_ZOC1)
             elif self.substate == 'melee_ZOC1' and not self.map_action.animation_manager.has_active_animations():
@@ -526,11 +540,11 @@ class Interact_State(State):
             elif self.substate == 'melee_ZOC3' and not self.map_action.animation_manager.has_active_animations():
                 return 'interact','after_battle'
 
-            elif self.substate == 'melee2' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'melee2' and self.map_action.timer('melee_attack1'):
                 self.map_action.selected_battler.isfollowing_root = True
                 return 'player_moving'
 
-            elif self.substate == 'melee_counter1' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'melee_counter1' and self.map_action.timer('melee_counter'):
                 # 반격 데미지 계산
                 counter_damage = CombatFormulas.calculate_melee_counter_damage(self,self.map_action.selected_battler, self.map_action.target_battler)
 
@@ -591,10 +605,10 @@ class Interact_State(State):
                 return 'interact','melee_counter2'
 
             elif self.substate == 'melee_counter2' and not self.map_action.selected_battler.ismove:
-                self.map_action.update_time = pygame.time.get_ticks() + 1000
+                self.map_action.timer('melee_counter2', 1000)
                 return 'interact','melee_counter3'
 
-            elif self.substate == 'melee_counter3' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'melee_counter3' and self.map_action.timer('melee_counter2'):
                 self.level.visible_sprites.focus_on_target(self.map_action.selected_battler, cursor_obj=self.level.cursor)
                 return 'interact','after_battle'
 #   원거리 공격 처리
@@ -613,15 +627,15 @@ class Interact_State(State):
                 self.map_action.sound_manager.play_sound(**SOUND_PROPERTIES['ARROW_FLYING'])   
                 self.map_action.sound_manager.play_sound(**SOUND_PROPERTIES['SHOOT_ARROW'])   
 
-                self.map_action.update_time = pygame.time.get_ticks() + self.map_action.selected_battler.attack_delay + 500
+                self.map_action.timer('melee_range', 500)
                 return 'interact','range1'
 
-            elif self.substate == 'range1' and pygame.time.get_ticks() > self.map_action.update_time:
+            elif self.substate == 'range1' and self.map_action.timer('melee_range'):
                 self.level.visible_sprites.focus_on_target(self.map_action.target_battler)
-                self.map_action.update_time = pygame.time.get_ticks() + 500
+                self.map_action.timer('melee_range1', 500)
                 return 'interact','range2'
 
-            elif self.substate == 'range2' and pygame.time.get_ticks() > self.map_action.update_time:
+            elif self.substate == 'range2' and self.map_action.timer('melee_range1'):
                 attacker = self.map_action.selected_battler
                 target = self.map_action.target_battler
 
@@ -640,10 +654,10 @@ class Interact_State(State):
                     target.battle_return(attacker, move_type='knockback')
                     # 데미지 적용
                     self.map_action.Damage(attacker, target, damage, "Range",is_critical=is_critical)
-                self.map_action.update_time = pygame.time.get_ticks() + 500
+                self.map_action.timer('melee_range2', 500)
                 return 'interact','range3'
 
-            elif self.substate == 'range3' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'range3' and self.map_action.timer('melee_range2'):
                 self.level.visible_sprites.focus_on_target(self.map_action.selected_battler, cursor_obj=self.level.cursor)
                 return 'interact','after_battle'
 #   스킬 애니메이션 생성 처리(_skill), 배틀러가 행동(casting)을 마무리할 때 처리 시작
@@ -724,7 +738,7 @@ class Interact_State(State):
                                 self.map_action.apply_skill_effects(target,self.map_action.skill,skill_level) 
                     self.sequence_tiles = tile_positions[1:]
                     self.sequence_delay = skill_info['sequential']['tick']
-                    self.next_sequence_time = pygame.time.get_ticks() + self.sequence_delay * 1000
+                    self.map_action.timer('skill_sequence', self.sequence_delay * 1000)
                     return 'interact', 'skill_sequence'
                     
                 elif animate_type == 'all_tiles':
@@ -741,10 +755,10 @@ class Interact_State(State):
                 else:
                     print(f'Error: 애니메이션 타입 인식 실패 : {animate_type}')
                     
-                self.TEMP_wait_time = pygame.time.get_ticks() + skill_info.get('Dmg_timing', 0)
+                self.map_action.timer('melee_skill1', skill_info.get('Dmg_timing', 0))
                 return 'interact', 'skill2'
                 
-            elif self.substate == 'skill2' and pygame.time.get_ticks() > self.TEMP_wait_time:
+            elif self.substate == 'skill2' and self.map_action.timer('melee_skill1'):
                 targets = (self.map_action.target_battler if isinstance(self.map_action.target_battler, list) else [self.map_action.target_battler])
                 
                 for target in targets:
@@ -759,7 +773,7 @@ class Interact_State(State):
                     return 'interact', 'after_battle'
                 
             elif self.substate == 'skill_sequence':
-                if pygame.time.get_ticks() >= self.next_sequence_time and self.sequence_tiles:
+                if self.map_action.timer('skill_sequence') and self.sequence_tiles:
                     # 다음 타일 애니메이션 생성
                     skill_info = SKILL_PROPERTIES[self.map_action.skill]['Active']
                     tile = self.sequence_tiles.pop(0)
@@ -775,7 +789,7 @@ class Interact_State(State):
                             self.map_action.apply_skill_effects(target,self.map_action.skill,skill_level)
                     
                     if self.sequence_tiles:
-                        self.next_sequence_time = pygame.time.get_ticks() + self.sequence_delay * 1000
+                        self.map_action.timer('skill_sequence', self.sequence_delay * 1000)
                     else:
                         return 'interact', 'skill3'
 #   배틀 종료 후 사망 여부 판정 (_interact_after_battle)
@@ -785,13 +799,13 @@ class Interact_State(State):
                 self.map_action.process_OVD_gain()
                 self.map_action.visible_sprites.disable_zoom()
                 if any(battler.Cur_HP == 0 for battler in self.level.battler_sprites):
-                    self.map_action.update_time = pygame.time.get_ticks() + 500
+                    self.map_action.timer('after_battle', 500)
                     return 'interact','after_battle_death1'
     #   아무것도 사망하지 않으면 캐릭터 턴 종료
                 else:
                     self.map_action.endturn()
 
-            elif self.substate == 'after_battle_death1' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'after_battle_death1' and self.map_action.timer('after_battle'):
                 for battler in self.level.battler_sprites:
                     if battler.Cur_HP == 0:
 
@@ -803,10 +817,10 @@ class Interact_State(State):
                 for battler in self.level.battler_sprites:
                     if battler.Cur_HP <= 0:
                         battler.kill()
-                self.map_action.update_time = pygame.time.get_ticks() + 1000
+                self.map_action.timer('after_battle_death2', 1000)
                 return 'interact','after_battle_death3'
 
-            elif self.substate == 'after_battle_death3' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'after_battle_death3' and self.map_action.timer('after_battle_death2'):
                 self.map_action.endturn()
 
         elif self.substate[:10] == 'using_item':
@@ -816,13 +830,13 @@ class Interact_State(State):
                     self.map_action.animation_manager.create_animation(self.map_action.target_battler,item_data['animate'],wait=True)
                 return 'interact','using_item2' 
             elif self.substate == 'using_item2' and not self.map_action.animation_manager.has_active_animations():
-                self.map_action.update_time = pygame.time.get_ticks() + 300
+                self.map_action.timer('using_item2', 300)
                 return 'interact','using_item3'
-            elif self.substate == 'using_item3' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'using_item3' and self.map_action.timer('using_item2'):
                 self.map_action.use_item(self.map_action.target_battler, self.map_action.item_to_use)
-                self.map_action.update_time = pygame.time.get_ticks() + 800
+                self.map_action.timer('using_item3', 800)
                 return 'interact','using_item4'
-            elif self.substate == 'using_item4' and self.map_action.update_time < pygame.time.get_ticks():
+            elif self.substate == 'using_item4' and self.map_action.timer('using_item3'):
                 self.level.ui.current_item_menu_index = 0
                 self.map_action.endturn()
 class Select_Magic_Target_State(State):

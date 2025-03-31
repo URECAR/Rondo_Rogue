@@ -3,18 +3,88 @@ from properties import *
 import random
 class MAP1:
     data = {
-        'Max_X' : 35 * TILESIZE,
-        'Max_Y' : 25 * TILESIZE,   
+        'Max_X': 35 * TILESIZE,
+        'Max_Y': 25 * TILESIZE,   
     }
+    # 아군 기본 스폰 위치 리스트
+    ally_spawn_points = [
+        [1,2], [2,2], [3,2], [4,2], [5,2],
+        [1,3], [2,3], [3,3], [4,3], [5,3]
+    ]
+    
+    # 새로운 형식의 spawns
     spawns = {
-        'Player1': {'Spawn': [14, 14], 'Level': 3, 'base_team': 'Ally'},
-        'Player2': {'Spawn': [14, 13], 'Level': 4, 'base_team': 'Ally'},
-        'Player3': {'Spawn': [15, 14], 'Level': 4, 'base_team': 'Ally'},
-        'Player_wizard1': {'Spawn': [13, 14], 'Level': 3, 'base_team': 'Ally'},
-        'Spirit': {'Spawn': [10, 13], 'Level': 5, 'base_team': 'Enemy'},
-        'Army_Archer': {'Spawn': [9, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Piglin': {'Spawn': [12, 14], 'Level': 6, 'base_team': 'Enemy'},
-        'Bamboo': {'Spawn': [13, 20], 'Level': 6, 'base_team': 'Enemy'}
+        # 아군 유닛들
+        'Ally1': {
+            'level': 3,
+            'team': 'Ally',
+            'char_type': 'Player1',
+            'spawn_order': 1
+        },
+        'Ally2': {
+            'level': 4,
+            'team': 'Ally',
+            'char_type': 'Player2',
+            'spawn_order': 1
+        },
+        'Ally3': {
+            'level': 4,
+            'team': 'Ally',
+            'char_type': 'Player3',
+            'spawn_order': 1
+        },
+        'Ally4': {
+            'level': 3,
+            'team': 'Ally',
+            'char_type': 'Player_wizard1',
+            'spawn_order': 1
+        },
+        
+        # 적 유닛들
+        'Enemy1': {
+            'level': 5,
+            'team': 'Enemy',
+            'char_type': 'Spirit',
+            'spawn_order': 1,
+            'spawn_pos': [19, 19]
+        },
+        'Enemy2': {
+            'level': 6,
+            'team': 'Enemy',
+            'char_type': 'Army_Archer',
+            'spawn_order': 1,
+            'spawn_pos': [25, 18]
+        },
+        'Enemy3': {
+            'level': 6,
+            'team': 'Enemy',
+            'char_type': 'Piglin',
+            'spawn_order': 1,
+            'spawn_pos': [26, 18]
+        },
+        'Enemy4': {
+            'level': 6,
+            'team': 'Enemy',
+            'char_type': 'Bamboo',
+            'spawn_order': 1,
+            'spawn_pos': [27, 18]
+        },
+        
+        # 추가 스폰 예시 (나중에 spawn_order 2, 3, 4로 생성될 수 있는 유닛들)
+        'reinforce_ally1': {
+            'level': 5,
+            'team': 'Ally',
+            'char_type': 'Player1',
+            'spawn_order': 2,
+            'spawn_pos': [1, 4]
+        },
+        'reinforce_enemy1': {
+            'level': 7,
+            'team': 'Enemy',
+            'char_type': 'Piglin',
+            'spawn_order': 2,
+            'spawn_pos': [28, 19]
+        }
     }
 class CharacterDatabase:
     data = {
