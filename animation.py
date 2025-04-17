@@ -48,39 +48,14 @@ class Animation(pygame.sprite.Sprite):
             self.y_offset = 0
             self.setup_damage_animation(start_pos, type = animation_type)
 
-        elif animation_type == 'PHASE_CHANGE':
-            self.duration = self.props['duration']
-            self.slide_speed = self.props['slide_speed']
-            self.fade_in_duration = self.props['fade_in_duration']
-            self.fade_out_duration = self.props['fade_out_duration']
-            self.center_duration = self.props['center_duration']
-            self.elapsed_time = 0
-            self.camera_offset = value[0]
-            
-            # 이미지 로드
-            if value[1] == 'Player':
-                self.orig_image = pygame.image.load(f"{self.props['folder_path']}/PlayersPhase.png").convert_alpha()
-            elif value[1] == 'Enemy':
-                self.orig_image = pygame.image.load(f"{self.props['folder_path']}/EnemysPhase.png").convert_alpha()
-            else:
-                raise ValueError(f"Invalid phase value: {value}. Must be either 'Player' or 'Enemy'")
-                
-            self.original_width = self.orig_image.get_width()
-            self.original_height = self.orig_image.get_height()
-            self.image = pygame.transform.scale(self.orig_image,(self.original_width / 2,self.original_height / 2))
-            
-            # 화면 관련 초기 설정
-            self.rect = self.image.get_rect()
-            self.true_pos = pygame.math.Vector2(-self.original_width, HEIGHT // 2)  # True position in world space
-            self.rect.midleft = self.true_pos
-            self.alpha = 0
-            
-            # Priority for rendering
-            self.priority = float('inf')  # Always render on top
+# 기존 Animation 클래스 내부
 
-        elif animation_type == 'STAT_CHANGE':
-            self.setup_stat_change_animation(start_pos, value)
-            self.priority = 9999
+        elif animation_type == 'PHASE_CHANGE':
+            # value: 전달된 인자는 예를 들어 [offset, 'Player'] 또는 [offset, 'Enemy'] 형태로 전달
+            self.value = value
+            self.phase_type = value[1]  # "Player" 또는 "Enemy"
+            # 기존 시간 처리 대신 여기서는 setup_phase_change_animation()에서 시작 시간 기록
+            self.setup_phase_change_animation()
 
         elif animation_type == 'LEVEL_UP':
             # 공통 속성 초기화
@@ -245,7 +220,6 @@ class Animation(pygame.sprite.Sprite):
 
         # 우선순위 설정 - 화면 최상단에 표시되도록
         self.priority = float('inf')  # 무한대로 설정하여 항상 최상단에 표시
-
     def setup_spread_animation(self):
         """분산 애니메이션 초기 설정"""
         self.original_width, self.original_height = self.original_image.get_size()
@@ -446,55 +420,110 @@ class Animation(pygame.sprite.Sprite):
             # 업데이트된 위치에 파트 그리기
             self.image.blit(part_copy, (int(self.part_positions[i][0]), 
                                     int(self.part_positions[i][1])))
+    def setup_phase_change_animation(self):
+        """Phase change 애니메이션 초기 설정"""
+        self.display_surface = pygame.display.get_surface()
+        self.screen_width = self.display_surface.get_width()
+        self.screen_height = self.display_surface.get_height()
+        self.sprite_type = 'Screen_Sprite'
+        # 반투명 오버레이 
+        self.overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        self.overlay.fill((0, 0, 0, 100))
+        
+        # 애니메이션 시간 설정 (ms)
+        self.total_duration = 1300
+        self.in_duration = 500
+        self.hold_duration = 300
+        self.out_duration = 500
+        
+        # 폰트 및 텍스트 설정
+        self.font = pygame.font.Font(UI_FONT, 72)
+        if self.phase_type == "Player":
+            self.left_text = "PLAYER'S"
+        else:
+            self.left_text = "ENEMY'S"
+        self.right_text = "PHASE"
+        text_color = (100, 200, 255) if self.phase_type == "Player" else (255, 100, 100)
+        self.left_surface = self.font.render(self.left_text, True, text_color)
+        self.right_surface = self.font.render(self.right_text, True, text_color)
+        
+        # 텍스트 위치 계산
+        self.left_rect = self.left_surface.get_rect()
+        self.right_rect = self.right_surface.get_rect()
+        
+        # "플레이어" 텍스트 위치
+        self.start_left_pos = (-self.left_rect.width, 300)
+        self.target_left_pos = (600, 300)
+        self.final_left_pos = (self.screen_width + self.left_rect.width, 300)
+        
+        # "페이즈" 텍스트 위치
+        self.start_right_pos = (self.screen_width + self.right_rect.width, 420)
+        self.target_right_pos = (680, 420)
+        self.final_right_pos = (-self.right_rect.width, 420)
+        
+        self.start_time = pygame.time.get_ticks()
+        self.image = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(topleft=(0, 0))
+        self.priority = float('inf')
 
     def update_phase_change_animation(self):
-        """페이즈 전환 애니메이션 업데이트 - 카메라 고려"""
+        """Phase change 애니메이션 업데이트"""
         current_time = pygame.time.get_ticks()
-        dt = (current_time - self.last_update_time) / 1000.0
-        self.last_update_time = current_time
-        self.elapsed_time += dt
-        if self.elapsed_time >= self.duration:
+        elapsed = current_time - self.start_time
+        
+        if elapsed >= self.total_duration:
             self.kill()
             return
-
-        # Get current camera offset
-        camera_offset = self.camera_offset
-
-        # Calculate screen center in world coordinates
-        world_center_x = camera_offset.x + (WIDTH // 2)
-        scaled_width = self.original_width // 5  # Account for the scale we applied to the image
-
-        phase_duration = (self.duration - self.center_duration) / 2
-
-        if self.elapsed_time < phase_duration:  # Fade in & move to center
-            progress = self.elapsed_time / phase_duration
-            self.alpha = int(255 * progress)
-            
-            # Calculate position relative to camera
-            start_x = camera_offset.x - scaled_width
-            target_x = world_center_x - (scaled_width // 2)
-            self.true_pos.x = start_x + (target_x - start_x) * progress
-            self.true_pos.y = camera_offset.y + (HEIGHT // 2)
-            
-        elif self.elapsed_time < phase_duration + self.center_duration:  # Stay in center
-            self.alpha = 255
-            self.true_pos.x = world_center_x - (scaled_width // 2)
-            self.true_pos.y = camera_offset.y + (HEIGHT // 2)
-            
-        else:  # Fade out & move right
-            progress = (self.elapsed_time - (phase_duration + self.center_duration)) / phase_duration
-            self.alpha = int(255 * (1 - progress))
-            
-            start_x = world_center_x - (scaled_width // 2)
-            target_x = camera_offset.x + WIDTH
-            self.true_pos.x = start_x + (target_x - start_x) * progress
-            self.true_pos.y = camera_offset.y + (HEIGHT // 2)
-
-        # Update image alpha
-        self.image.set_alpha(self.alpha)
         
-        # Update rect position
-        self.rect.midleft = self.true_pos
+        self.image.fill((0, 0, 0, 0))
+        self.image.blit(self.overlay, (0, 0))
+        
+        def ease_out_quad(t):
+            return 1 - (1 - t) ** 2
+            
+        def ease_in_quad(t):
+            return t ** 2
+        
+        # 이동 단계에 따른 위치 계산
+        if elapsed < self.in_duration:
+            t = elapsed / self.in_duration
+            ease_t = ease_out_quad(t)
+            
+            left_x = self.start_left_pos[0] + (self.target_left_pos[0] - self.start_left_pos[0]) * ease_t
+            left_y = self.start_left_pos[1] + (self.target_left_pos[1] - self.start_left_pos[1]) * ease_t
+            
+            right_x = self.start_right_pos[0] + (self.target_right_pos[0] - self.start_right_pos[0]) * ease_t
+            right_y = self.start_right_pos[1] + (self.target_right_pos[1] - self.start_right_pos[1]) * ease_t
+            
+        elif elapsed < self.in_duration + self.hold_duration:
+            left_x, left_y = self.target_left_pos
+            right_x, right_y = self.target_right_pos
+            
+        else:
+            t = (elapsed - self.in_duration - self.hold_duration) / self.out_duration
+            ease_t = ease_in_quad(t)
+            
+            left_x = self.target_left_pos[0] + (self.final_left_pos[0] - self.target_left_pos[0]) * ease_t
+            left_y = self.target_left_pos[1] + (self.target_left_pos[1] - self.target_left_pos[1]) * ease_t
+            
+            right_x = self.target_right_pos[0] + (self.final_right_pos[0] - self.target_right_pos[0]) * ease_t
+            right_y = self.target_right_pos[1] + (self.target_right_pos[1] - self.target_right_pos[1]) * ease_t
+        
+        # 텍스트 렌더링
+        left_rect = self.left_surface.get_rect(center=(int(left_x), int(left_y)))
+        right_rect = self.right_surface.get_rect(center=(int(right_x), int(right_y)))
+        
+        self.image.blit(self.left_surface, left_rect)
+        self.image.blit(self.right_surface, right_rect)
+
+
+    def _ease_in_quad(self, t):
+        """이징 함수: 천천히 시작해서 점점 빨라짐"""
+        return t * t
+
+    def _ease_out_quad(self, t):
+        """이징 함수: 빠르게 시작해서 점점 느려짐"""
+        return 1 - (1 - t) * (1 - t)
 
     def update_stat_change_animation(self):
         current_time = pygame.time.get_ticks()
@@ -590,13 +619,12 @@ class AnimationManager:
         return len(self.active_animations) > 0
 
     def create_animation(self, target, animation_type, wait=False, value=None, track_target=False):
-        """애니메이션 생성"""
-        animation = Animation(target, animation_type, value,track_target=track_target)
+        animation = Animation(target, animation_type, value, track_target=track_target)
         self.visible_sprites.add(animation)
-
         if wait:
             self.active_animations.append(animation)
         return animation
+
 
     def update(self):
         """애니메이션 상태 업데이트"""

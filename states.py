@@ -40,17 +40,9 @@ class Explore_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
     def enter(self):
-        if (not hasattr(self, 'event_triggered')
-            and self.map_action.current_phase == 'Ally'
-            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player1'), None), next((b for b in self.level.battlers if b.char_type == 'Player2'), None))):
-            self.event_triggered = True
-            return ('event', 'Event1', 'explore')
-        elif (not hasattr(self, 'event_triggered2')
-            and self.map_action.current_phase == 'Ally'
-            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player2'), None), next((b for b in self.level.battlers if b.char_type == 'Player3'), None))):
-            self.event_triggered2 = True
-            return ('event', 'Event2', 'explore')
-            
+        if event := self.event_check():
+            return event
+        
         if self.map_action.current_phase == 'Ally':
             self.cursor.move_lock = False
             self.cursor.SW_select = False
@@ -89,6 +81,30 @@ class Explore_State(State):
             elif self.substate == 'Enemy_wait' and self.map_action.timer('enemy_wait'):
                 self.substate = None
                 return self.map_action.AI.execute()
+
+    def event_check(self):
+        if (not hasattr(self, 'event_triggered')
+            and self.map_action.current_phase == 'Ally'
+            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player1'), None), next((b for b in self.level.battlers if b.char_type == 'Player2'), None))):
+            self.event_triggered = True
+            return ('event', 'Event1', 'explore')
+        elif (not hasattr(self, 'event_triggered2')
+            and self.map_action.current_phase == 'Ally'
+            and is_adjacent(next((b for b in self.level.battlers if b.char_type == 'Player2'), None), next((b for b in self.level.battlers if b.char_type == 'Player3'), None))):
+            self.event_triggered2 = True
+            return ('event', 'Event2', 'explore')
+        if (not hasattr(self.map_action, 'spawn_order_2_triggered') or 
+            not self.map_action.spawn_order_2_triggered):
+            if self.map_action.death_count['Enemy'] >= 5:
+                print("5명의 적을 처치했습니다! 새로운 적이 등장합니다!")
+                self.level.spawn_battlers(2)  # spawn_order가 2인 배틀러들 소환
+                self.map_action.spawn_order_2_triggered = True
+                
+                # 새로 소환된 배틀러들의 위치로 카메라 이동
+                new_battlers = [b for b in self.level.battler_sprites 
+                            if b.team == 'Enemy' and not b.inactive]
+                if new_battlers:
+                    self.level.visible_sprites.focus_on_target(new_battlers[0])
 class Look_Object_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
@@ -110,7 +126,7 @@ class Player_Control_State(State):
         self.cursor.select_lock = False
         self.map_action.cur_moves = self.map_action.selected_battler.stats['Mov']
         self.map_action.level.visible_sprites.focus_on_target(self.map_action.selected_battler)
-        self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves, show=True)
+        self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves)], 'Update')
         # print(self.map_action.selected_battler.effects)
     def exit(self):
         self.cursor.move_lock = True
@@ -150,7 +166,8 @@ class Player_Control_State(State):
                     self.map_action.move_roots.append([Tile((cursor_pos[0], cursor_pos[1]),[self.map_action.visible_sprites, self.map_action.obstacle_sprites],'move_root'),move_cost])
                     self.map_action.cur_moves -= move_cost
                     self.map_action.update_path_tiles()
-                    self.map_action.check_movable_from_pos(pygame.math.Vector2(cursor_pos) // TILESIZE, self.map_action.cur_moves, show=True)
+                    self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(pygame.math.Vector2(cursor_pos) // TILESIZE, self.map_action.cur_moves)], 'Update')
+                    
 
         if self.map_action.input_manager.is_just_pressed('Cancel') and not self.map_action.move_roots:
             
@@ -173,8 +190,8 @@ class Player_Control_State(State):
                 self.map_action.move_roots[-1][0].kill()
                 self.map_action.move_roots.pop()
             # self.level.visible_sprites.focus_on_target(self.map_action.selected_battler)
-            self.map_action.cur_moves = self.map_action.selected_battler.stats['Mov']
-            self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves)
+            self.map_action.cur_moves = self.map_action.selected_battler.stats['Mov']   
+            self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves)], 'Update')
             return
 
         # 기존 루트의 중간 지점 클릭시 루트를 그 지점까지 Pop
@@ -187,7 +204,7 @@ class Player_Control_State(State):
             self.map_action.cur_moves += accumulated_cost
             self.map_action.update_path_tiles()
             last_root_pos = pygame.math.Vector2(self.map_action.move_roots[-1][0].pos) if self.map_action.move_roots else self.map_action.selected_battler.pos
-            self.map_action.check_movable_from_pos(last_root_pos, self.map_action.cur_moves)
+            self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(last_root_pos, self.map_action.cur_moves)], 'Update')
             return
 
         # 새로운 이동 지점 추가시
@@ -202,7 +219,7 @@ class Player_Control_State(State):
                 ])
                 self.map_action.cur_moves -= move_cost
                 self.map_action.update_path_tiles()
-                self.map_action.check_movable_from_pos(pygame.math.Vector2(cursor_pos) // TILESIZE, self.map_action.cur_moves)
+                self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(pygame.math.Vector2(cursor_pos) // TILESIZE, self.map_action.cur_moves)], 'Update')
                 return
         # 이동 실행 전에 최종 목적지 체크
         if (self.map_action.move_roots and (self.map_action.input_manager.is_just_pressed('Select') or self.cursor.clicked_self) and str(self) == 'player_control') and not self.map_action.selected_battler.inactive:
@@ -350,7 +367,7 @@ class Player_Menu_State(State):
             
         elif action == '취소':
             self.cursor.move_lock = False
-            self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves, show=True)
+            self.map_action.highlight_tiles_set([pos[0] for pos in self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos, self.map_action.cur_moves)], 'Update')
             return 'player_control'
 class Phase_Change_State(State):
     def __init__(self, map_action):
@@ -407,7 +424,6 @@ class Phase_Change_State(State):
             elif self.map_action.current_phase == 'Enemy':
                 phase_anim = self.map_action.animation_manager.create_animation(None,'PHASE_CHANGE',wait=True,value=[self.level.visible_sprites.offset, 'Enemy'])
                 self.map_action.sound_manager.play_bgm(**SOUND_PROPERTIES['ENEMY_PHASE'])
-
             self.level.visible_sprites.focus_on_target([battler for battler in self.level.battler_sprites if battler.team == self.map_action.current_phase][0],cursor_obj=self.level.cursor)
             self.substate = 'change2'
 
@@ -501,11 +517,7 @@ class Interact_State(State):
                     for battler in self.level.battler_sprites 
                     if battler != self.map_action.selected_battler):
                     while(not gotopos):
-                        movable_tiles = self.map_action.check_movable_from_pos(
-                            self.map_action.selected_battler.pos,
-                            i,
-                            show=False
-                        )
+                        movable_tiles = self.map_action.check_movable_from_pos(self.map_action.selected_battler.pos,i)
                         for movable_tile in movable_tiles:
                             if all(movable_tile[0] != battler.pos 
                                 for battler in self.level.battler_sprites 
@@ -808,15 +820,16 @@ class Interact_State(State):
             elif self.substate == 'after_battle_death1' and self.map_action.timer('after_battle'):
                 for battler in self.level.battler_sprites:
                     if battler.Cur_HP == 0:
-
+                        self.map_action.death_count[battler.team] += 1
                         # 경험치 획득 및 레벨업 처리
                         battler.death()  # 예시: 배틀러를 죽이는 메서드 호출
                 return 'interact','after_battle_death2'           
 #   사망한 배틀러가 존재할 시 해당 배틀러들이 isdead를 띄울 때까지 대기, 이 후 객체 kill (_interact_death)
             elif self.substate == 'after_battle_death2' and all((battler.Cur_HP <= 0 and battler.isdead) or battler.Cur_HP > 0 for battler in self.level.battler_sprites):
-                for battler in self.level.battler_sprites:
-                    if battler.Cur_HP <= 0:
-                        battler.kill()
+                # for battler in self.level.battler_sprites:
+                #     if battler.Cur_HP <= 0:
+                        
+                #         battler.kill()
                 self.map_action.timer('after_battle_death2', 1000)
                 return 'interact','after_battle_death3'
 
@@ -1063,44 +1076,108 @@ class Event_State(State):
         self.message_dialog = None
         self.event_queue = []
         self.current_event = None
+        self.focus_queue = []
+        self.focus_timer = None
+        self.focus_duration = 1000  # 1 second per focus
+        self.current_phase = 'dialog'  # 'dialog', 'focus', 'complete'
+
+    def display_text(self, text):
+        """Display text in message dialog"""
+        self.message_dialog = MessageDialog([text], pygame.font.Font(GENERAL_FONT, 24), self.level)
+        self.current_phase = 'dialog'
+        return None
+
+    def spawn_queue(self, spawn_order):
+        """Spawn enemies and set up focus queue"""
+        # Spawn new enemies
+        self.level.spawn_battlers(spawn_order)
+        self.map_action.spawn_order_2_triggered = True
         
+        # Set up focus queue
+        self.focus_queue = [b for b in self.level.battler_sprites 
+                          if b.team == 'Enemy' and not b.inactive]
+        
+        # Add original battler to focus at the end
+        original_battler = next((b for b in self.level.battlers 
+                               if b.team == 'Ally' and not b.inactive), None)
+        if original_battler:
+            self.focus_queue.append(original_battler)
+            
+        # Start focus timer
+        self.focus_timer = pygame.time.get_ticks()
+        self.current_focus = 0
+        self.current_phase = 'focus'
+        return None
+
     def enter(self, event_queue, return_state):
         Event_List = {
-            "Event1": ["이벤트1입니다. Player1과 Player2가 근접했을 경우 실행됩니다.", " 이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다."],
-            "Event2": ["이벤트2입니다. Player2와 Player3이 근접했을 경우 실행됩니다.", " 이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다."],
+            "Event1": [
+                lambda: self.display_text("이벤트1입니다. Player1과 Player2가 근접했을 경우 실행됩니다."),
+                lambda: self.display_text("이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.")
+            ],
+            "Event2": [
+                lambda: self.display_text("이벤트2입니다. Player2와 Player3이 근접했을 경우 실행됩니다."),
+                lambda: self.display_text("이렇게 긴 메세지는 출력되기 전에 Cancel 키를 누르면 즉시 출력을 할 수 있습니다.")
+            ],
+            "Reinforcement": [
+                lambda: self.display_text("5명의 적을 처치했습니다! 새로운 적이 등장합니다!"),
+                lambda: self.spawn_queue(2)
+            ]
         }
-        if event_queue in Event_List:
-            self.event_queue = Event_List[event_queue]
+        
         self.return_state = return_state
         self.cursor.move_lock = True
-        self.next_event()
-    
-    def next_event(self):
+        
+        if event_queue in Event_List:
+            self.event_queue = Event_List[event_queue].copy()
+            self.execute_next_event()
+
+    def execute_next_event(self):
+        """Execute the next event in queue"""
         if self.event_queue:
-            next_message = self.event_queue.pop(0)
-            self.message_dialog = MessageDialog([next_message], pygame.font.Font(GENERAL_FONT, 24), self.level)
+            next_event = self.event_queue.pop(0)
+            next_event()
         else:
             return self.return_state
-            
+        return None
+
     def update(self):
-        if not self.message_dialog:
-            return self.return_state
-            
-        self.message_dialog.update()
-        self.message_dialog.render()
-        
-        # Handle Cancel key for instant text display
-        if self.map_action.input_manager.is_just_pressed('Cancel'):
-            if self.message_dialog and not self.message_dialog.finished:
-                self.message_dialog.finish_current_message()
-                return
+        if self.current_phase == 'focus':
+            current_time = pygame.time.get_ticks()
+            if current_time - self.focus_timer >= self.focus_duration:
+                self.focus_timer = current_time
+                self.current_focus += 1
                 
-        # Handle Select key or left click for next message
-        if ((self.map_action.input_manager.is_just_pressed('Select') or 
-             self.map_action.input_manager.is_left_click()) and 
-            self.message_dialog and self.message_dialog.finished):
-            self.message_dialog = None
-            return self.next_event()
+                if self.current_focus < len(self.focus_queue):
+                    # Focus on next battler
+                    self.level.visible_sprites.focus_on_target(
+                        self.focus_queue[self.current_focus]
+                    )
+                else:
+                    # Finished focusing on all battlers
+                    self.focus_queue = []
+                    return self.execute_next_event()
+            return None
+
+        elif self.current_phase == 'dialog':
+            if self.message_dialog:
+                self.message_dialog.update()
+                self.message_dialog.render()
+                
+                # Handle instant display with Cancel
+                if self.map_action.input_manager.is_just_pressed('Cancel'):
+                    if not self.message_dialog.finished:
+                        self.message_dialog.finish_current_message()
+                        return None
+                        
+                # Handle dialog completion
+                if ((self.map_action.input_manager.is_just_pressed('Select') or 
+                     self.map_action.input_manager.is_left_click()) and 
+                    self.message_dialog.finished):
+                    self.message_dialog = None
+                    return self.execute_next_event()
+            
+        return None
 class Upgrade_State(State):
     def __init__(self, map_action):
         super().__init__(map_action)
@@ -1201,18 +1278,56 @@ class Upgrade_State(State):
                 self.apply_upgrade(i)
                 self.map_action.endturn()
 
-
-
-
     def apply_upgrade(self, card_index):
         battler = self.map_action.selected_battler
         card = self.cards[card_index]
         
-        # Apply skill upgrades
+        # Apply skill upgrades 
         for skill_name, level in card['act']['skill'].items():
             if skill_name in battler.skills:
                 battler.skills[skill_name] += level
             else:
                 battler.skills[skill_name] = level
+        
+        # Remove all existing passive/equipment effects
+        battler.effects = [effect for effect in battler.effects 
+                          if effect.type not in ['supportbuff', 'equipment', 'passive']]
+        
+        # Reapply all passive skills effects
+        for skill_name, skill_level in battler.skills.items():
+            if skill_info := SKILL_PROPERTIES.get(skill_name, {}).get('Passive'):
+                if skill_info.get('condition'):
+                    # Condition-based passive skills will be checked by effect manager
+                    continue
+                    
+                if effects := skill_info.get('effects'):
+                    if 'stats' in effects:
+                        value = effects['stats'][skill_level]
+                    elif 'stats_%' in effects:
+                        value = {}
+                        values = effects['stats_%'][skill_level]
+                        for key in values:
+                            value[key] = battler.stats[key] * values[key] / 100
+                        
+                    effect = Effect(
+                        effect_type='passive',
+                        effects=value,
+                        source=f"passive_{skill_name}",
+                        remaining_turns=0
+                    )
+                    battler.effects.append(effect)
+                    
+        # Reapply equipment effects
+        if hasattr(battler, 'equipment'):
+            for slot, item in battler.equipment.items():
+                if item and 'stats' in item:
+                    effect = Effect(
+                        effect_type='equipment',
+                        effects=item['stats'],
+                        source=f"equipment_{slot}",
+                        remaining_turns=0
+                    )
+                    battler.effects.append(effect)
+                    
         battler.upgrade_points -= 1
         self.map_action.effect_manager.update_effects(battler)

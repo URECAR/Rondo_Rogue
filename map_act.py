@@ -9,7 +9,8 @@ from support import SoundManager, InputManager, EffectManager, Effect, TimerMana
 from ai import AI
 from ui import ConfirmationDialog
 from states import *
-
+from collections import deque
+import heapq
 class MapAction:
     def __init__(self,level_instance):
         self.level = level_instance
@@ -47,14 +48,14 @@ class MapAction:
         self.effect_manager = EffectManager()
         self.timer = TimerManager()
         self.AI = AI(self)
-        self.update_time = 0
-        self.step_enemy_turns = False
+
         self.movable_tiles = []
         self.highlight_tiles = []
         self.animate_pos = None
         self.current_skill_index = 0  # 선택된 스킬 인덱스 추가
         self.Acted = []
         self.battle_exp_gain = 0
+        self.death_count =  {'Ally': 0, 'Enemy': 0, 'Neutral': 0}    # 적 처치 수
         self.current_dialog = None
         self.path_dragging = False
         self.last_drag_pos = None
@@ -132,7 +133,8 @@ class MapAction:
         for battler in self.level.battler_sprites:
             if battler.OVD_progress // 100 >= 1 and battler.OVD_max_level > battler.OVD_level:
                 battler.OVD_level += int(battler.OVD_progress // 100)
-                if battler.OVD_level == battler.OVD_max_level:
+                if battler.OVD_level >= battler.OVD_max_level:
+                    battler.OVD_level = battler.OVD_max_level
                     battler.OVD_progress = 0
                 else:
                     battler.OVD_progress = battler.OVD_progress % 100
@@ -194,50 +196,39 @@ class MapAction:
         """이동 경로 업데이트"""
         Tile.update_path_tiles(self.move_roots, self.visible_sprites, self.obstacle_sprites, self.selected_battler)
 
-    def check_movable_from_pos(self, start_pos, moves_left, show=True, check_pos=None, exclude_pos=[], except_self=False):
+    def check_movable_from_pos(self, start_pos, moves_left, check_pos=None, exclude_pos=[], except_self=False, attackable_check=False):
         """특정 위치에서의 이동 가능 범위 계산"""
-        self.highlight_tiles_set(None,mode='Clear')
         moves_data = self.level.level_data["moves"]
         visited = {}
-        movable_positions = []
+        movable_positions = {}
         paths = {}
         if not except_self:
-            character_pos_tuple = (float(self.selected_battler.pos.x), float(self.selected_battler.pos.y))
+            character_pos_tuple = (float(start_pos.x), float(start_pos.y))
         else:
             character_pos_tuple = ()
         start_pos_tuple = (float(start_pos.x), float(start_pos.y))
         
+        from collections import deque
         queue = deque([(start_pos, 0, [start_pos_tuple])])
 
         visited[start_pos_tuple] = 0
         paths[start_pos_tuple] = {tuple([start_pos_tuple])}
         directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         
-        # include_pos를 먼저 변환
         highlight_tiles = []
-        # root_positions과 exclude_positions 설정
         root_positions = {(float(root[0].pos.x), float(root[0].pos.y)) for root in self.move_roots}
         exclude_positions = root_positions | {character_pos_tuple}
         if exclude_pos:
-            exclude_positions |= {(float(pos.x), float(pos.y)) for pos in exclude_pos}
-            
-        # 각 위치에 배틀러가 있는지 미리 확인 (include_positions는 제외)
+            exclude_positions |= {(float(pos[0]), float(pos[1])) if isinstance(pos, tuple) else (float(pos.x), float(pos.y)) for pos in exclude_pos}
         battler_positions = {(float(battler.pos.x), float(battler.pos.y)) 
                             for battler in self.level.battler_sprites 
                             if battler != self.selected_battler and not battler.isdead}
-        # include_pos에 있는 위치는 배틀러 위치에서만 제외
+        
         target_pos = None
         if check_pos is not None:
             target_pos = (float(check_pos.x), float(check_pos.y))
-
-        # include_pos를 튜플 세트로 변환
-        # 각 위치에 배틀러가 있는지 미리 확인
-        battler_positions = {(float(battler.pos.x), float(battler.pos.y)) 
-                            for battler in self.level.battler_sprites 
-                            if battler != self.selected_battler and not battler.isdead}
-        # include_pos에 있는 위치는 배틀러 위치에서 제외
+        
         while queue:
-            # print(queue)
             current_pos, current_cost, current_path = queue.popleft()
             current_x, current_y = float(current_pos.x), float(current_pos.y)
             current_pos_tuple = (current_x, current_y)
@@ -251,10 +242,8 @@ class MapAction:
                 next_x = current_x + dx
                 next_y = current_y + dy
                 next_pos_tuple = (next_x, next_y)
-
-                if (0 <= next_x < len(moves_data) and 
-                    0 <= next_y < len(moves_data[0])):
-                    
+                
+                if (0 <= next_x < len(moves_data)) and (0 <= next_y < len(moves_data[0])):
                     if moves_data[int(next_x)][int(next_y)] == '-1' or next_pos_tuple in exclude_positions:
                         continue
 
@@ -262,40 +251,60 @@ class MapAction:
                     total_cost = current_cost + move_cost
                     remaining_moves = moves_left - total_cost
 
-                    # 배틀러가 있는 위치는 이동력 1 이상 필요 (include_pos는 제외)
                     if next_pos_tuple in battler_positions and remaining_moves < 1:
                         continue
 
                     if total_cost <= moves_left:
                         if next_pos_tuple not in visited or total_cost <= visited[next_pos_tuple]:
-                            pixel_pos = (int(next_x * TILESIZE), int(next_y * TILESIZE))
+                            new_path = current_path + [next_pos_tuple]
                             
-                            if remaining_moves >= 0:
-                                if not (next_pos_tuple in battler_positions and remaining_moves < 1):
-                                    new_path = current_path + [next_pos_tuple]
-                                    
-                                    if next_pos_tuple not in paths:
-                                        paths[next_pos_tuple] = set()
-                                    paths[next_pos_tuple].add(tuple(new_path))
-                                    
-                                    if next_pos_tuple not in visited or total_cost <= visited[next_pos_tuple]:
-                                        queue.append((pygame.math.Vector2(next_x, next_y), total_cost, new_path))
-                                    visited[next_pos_tuple] = total_cost
+                            if next_pos_tuple not in paths:
+                                paths[next_pos_tuple] = set()
+                            paths[next_pos_tuple].add(tuple(new_path))
+                            
+                            queue.append((pygame.math.Vector2(next_x, next_y), total_cost, new_path))
+                            visited[next_pos_tuple] = total_cost
 
-                                    if next_pos_tuple != character_pos_tuple:
-                                        movable_positions.append((next_pos_tuple, remaining_moves))
-                                        if not pygame.math.Vector2(next_x, next_y) in highlight_tiles:
-                                            highlight_tiles.append(pygame.math.Vector2(next_x, next_y))
-                                        
-        if show:
-            self.highlight_tiles_set(highlight_tiles,mode='Set',color='green')
+                            if next_pos_tuple != character_pos_tuple:
+                                if next_pos_tuple in movable_positions:
+                                    if remaining_moves > movable_positions[next_pos_tuple]:
+                                        movable_positions[next_pos_tuple] = remaining_moves
+                                else:
+                                    movable_positions[next_pos_tuple] = remaining_moves
+                                
+                                candidate = pygame.math.Vector2(next_x, next_y)
+                                if candidate not in highlight_tiles:
+                                    highlight_tiles.append(candidate)
+        
+
         if target_pos and target_pos in paths:
             shortest_paths = [path for path in paths[target_pos] if len(path) > 1]
             if shortest_paths:
-                total_cost = visited[target_pos]
                 return shortest_paths
                 
-        return movable_positions
+        if attackable_check:
+            attackable_dict = {}
+            check_directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            for pos_tuple, remaining in movable_positions.items():
+                attackable = False
+                x, y = pos_tuple
+                for dx, dy in check_directions:
+                    next_x = x + dx
+                    next_y = y + dy
+                    if 0 <= next_x < len(moves_data) and 0 <= next_y < len(moves_data[0]):
+                        if moves_data[int(next_x)][int(next_y)] == '-1':
+                            continue
+                        next_pos = (next_x, next_y)
+                        if next_pos in exclude_positions:
+                            continue
+                        move_cost = int(moves_data[int(next_x)][int(next_y)])
+                        if move_cost <= remaining:
+                            attackable = True
+                            break
+                attackable_dict[pos_tuple] = attackable
+            return [(pos, remaining, attackable_dict[pos]) for pos, remaining in movable_positions.items()]
+        else:
+            return list(movable_positions.items())
 
     def find_approach_path(self, start_pos, target_pos, moves, max_moves):
         """
@@ -501,7 +510,10 @@ class MapAction:
                 pygame.draw.rect(tile_image, color, pygame.Rect(0, 0, TILESIZE, TILESIZE), 4)
                 pygame.draw.rect(tile_image, 'black', pygame.Rect(0, 0, TILESIZE, TILESIZE), 1)
                 tile_image.set_alpha(128)
-                highlight_tile = Tile(pygame.math.Vector2(pos.x * TILESIZE, pos.y * TILESIZE),[self.visible_sprites],'area_display_tile')
+                if isinstance(pos, tuple):
+                    highlight_tile = Tile(pygame.math.Vector2(pos[0] * TILESIZE, pos[1] * TILESIZE),[self.visible_sprites],'area_display_tile')
+                else:
+                    highlight_tile = Tile(pygame.math.Vector2(pos.x * TILESIZE, pos.y * TILESIZE),[self.visible_sprites],'area_display_tile')
                 highlight_tile.image = tile_image
                 highlight_tile.identifier = identifier
                 if identifier == 'area':
@@ -516,6 +528,9 @@ class MapAction:
                 for tile in tiles_to_remove:
                     tile.kill()
                     self.highlight_tiles.remove(tile)
+        elif mode == 'Update':
+            self.highlight_tiles_set(None,mode='All_Clear')
+            self.highlight_tiles_set(pos_list)
         elif mode == 'All_Clear':
             for tile in self.highlight_tiles:
                 tile.kill()
@@ -537,6 +552,14 @@ class MapAction:
         x1, y1 = int(start_pos.x), int(start_pos.y)
         x2, y2 = int(end_pos.x), int(end_pos.y)
         
+        # 맵 크기 가져오기
+        map_width = len(self.level.level_data["ranges"])
+        map_height = len(self.level.level_data["ranges"][0]) if map_width > 0 else 0
+        
+        # 맵 범위 밖의 좌표는 맵 경계로 조정
+        x2 = max(0, min(x2, map_width - 1))
+        y2 = max(0, min(y2, map_height - 1))
+        
         # 브레젠험 알고리즘으로 선이 지나는 타일들 찾기
         dx = abs(x2 - x1)
         dy = abs(y2 - y1)
@@ -548,7 +571,10 @@ class MapAction:
         path_tiles = []
         
         while True:
-            path_tiles.append((x, y))
+            # 현재 위치가 맵 범위 내에 있는지 확인
+            if 0 <= x < map_width and 0 <= y < map_height:
+                path_tiles.append((x, y))
+            
             if x == x2 and y == y2:
                 break
                 
@@ -565,9 +591,9 @@ class MapAction:
             current_x, current_y = path_tiles[i]
             next_x, next_y = path_tiles[i + 1]
             
-            # 맵 범위 체크
-            if (0 <= current_x < len(self.level.level_data["ranges"][0]) and 
-                0 <= current_y < len(self.level.level_data["ranges"])):
+            # 현재 타일이 맵 범위 내에 있는지 다시 확인
+            if (0 <= current_x < map_width and 
+                0 <= current_y < map_height):
                 
                 # 다음 타일과의 방향 차이로 이동 방향 결정
                 dx = next_x - current_x
@@ -604,17 +630,17 @@ class MapAction:
                 # 현재 타일이 막혀있으면 더 이상 진행하지 않음
                 if is_blocked:
                     break
-        # 마지막 타일 추가
-        if path_tiles:
+                    
+        # 마지막 타일 추가 (맵 범위 내일 경우에만)
+        if path_tiles and (0 <= path_tiles[-1][0] < map_width and 
+                        0 <= path_tiles[-1][1] < map_height):
             last_x, last_y = path_tiles[-1]
-            if (0 <= last_x < len(self.level.level_data["ranges"][0]) and 
-                0 <= last_y < len(self.level.level_data["ranges"])):
-                range_value = self.level.level_data["ranges"][last_y][last_x]
-                is_blocked = range_value == '40'
-                tiles.append({
-                    'pos': pygame.math.Vector2(last_x, last_y),
-                    'blocked': is_blocked
-                })
+            range_value = self.level.level_data["ranges"][last_x][last_y]
+            is_blocked = range_value == '40'
+            tiles.append({
+                'pos': pygame.math.Vector2(last_x, last_y),
+                'blocked': is_blocked
+            })
         
         return tiles
 

@@ -118,7 +118,9 @@ class Character(pygame.sprite.Sprite):
         self.name = char_data.get('name', self.char_type)
         self.LV = MAP1.spawns[self.char_type]['Level'] if self.char_type in MAP1.spawns else 1
         self.skills = char_data['skills']
+        self.Class = char_data.get('Class', 'None')
         self.stats = CharacterDatabase.calculate_stats(self.char_type, self.LV)
+        
         self.base_stats = self.stats.copy()
         self.max_items = 4
         self.inventory = char_data.get('inventory', []).copy()

@@ -279,7 +279,11 @@ class Effect:
                 if self.is_percent:
                     effects_str.append(f"{stat}: {value:+}%")
                 else:
-                    effects_str.append(f"{stat}: {value:+}")
+                    # 1보다 작은 수는 소수점 3자리까지만 표시
+                    if abs(value) < 1:
+                        effects_str.append(f"{stat}: {value:+.3f}")
+                    else:
+                        effects_str.append(f"{stat}: {value:+}")
             effect_str += ", ".join(effects_str)
             
         # passive_conditional
@@ -294,29 +298,39 @@ class Effect:
                 if self.is_percent:
                     effects_str.append(f"{stat}: {value:+}%")
                 else:
-                    effects_str.append(f"{stat}: {value:+}")
+                    # 1보다 작은 수는 소수점 3자리까지만 표시
+                    if abs(value) < 1:
+                        effects_str.append(f"{stat}: {value:+.3f}")
+                    else:
+                        effects_str.append(f"{stat}: {value:+}")
             effect_str += ", ".join(effects_str)
             
             # 활성화 여부는 조건이 있는지만 표시
             if self.condition:
                 effect_str += " (조건부 활성)"
-        
+        elif self.type ==  'status':
+            if self.source:
+                source_str = self.source
+                source_str = source_str.replace("status_", "")
+                effect_str = f"{source_str}: "
         # 그 외 타입
         else:
             effect_str = f"[{self.type}] "
-            if self.source:
-                effect_str += f"from {self.source}: "
             effects_str = []
             for stat, value in self.effects.items():
                 if self.is_percent:
                     effects_str.append(f"{stat}: {value:+}%")
                 else:
-                    effects_str.append(f"{stat}: {value:+}")
+                    # 1보다 작은 수는 소수점 3자리까지만 표시
+                    if abs(value) < 1:
+                        effects_str.append(f"{stat}: {value:+.3f}")
+                    else:
+                        effects_str.append(f"{stat}: {value:+}")
             effect_str += ", ".join(effects_str)
         
         # 남은 턴수 표시
-        if self.remaining_turns is not None:
-            effect_str += f" ({self.remaining_turns} turns left)"
+        if self.remaining_turns is not None and self.remaining_turns > 0:
+            effect_str += f" ({self.remaining_turns} 턴 남음)"
         
         return effect_str
 
@@ -568,15 +582,7 @@ class EffectManager:
             )
             self.add_effect(battler, effect)
 
-    def apply_passive_effects(self, battler):
-        """패시브 효과를 적용"""
-        for effect in battler.effects:
-            if effect.type == 'passive_conditional':
-                if effect.check_condition(battler):
-                    # 조건을 충족한 경우 효과 적용
-                    for stat, value in effect.effects.items():
-                        if stat in battler.stats:
-                            battler.stats[stat] += value
+
 
 class MessageDialog:
     def __init__(self, messages, font, level):

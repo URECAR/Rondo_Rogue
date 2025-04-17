@@ -32,6 +32,7 @@ class Level:
         # self.create_map1()                                  # map1 생성
         self.create_map2()
         self.map_action = MapAction(self)  # MapAction 인스턴스 생성
+
     def create_map2(self):
             # 맵 데이터 로드
             map_data = {
@@ -271,18 +272,20 @@ class Level:
     def run(self):
         self.level_update()
         self.panorama_background.update()  # 먼저 파노라마 업데이트
-        self.panorama_background.draw()    # 그 다음 파노라마 그리기
+        self.panorama_background.draw()      # 그 다음 파노라마 그리기
         self.visible_sprites.custom_draw(self.cursor)
         self.visible_sprites.update()
         self.map_action.update()
         self.ui.display()
-        # debug(self.battlers['Player1'].effect_manager.get_active_effects(self),)
-        # debug(self.battlers['Player3'].pose)
-        debug(self.cursor.pos, x = 150)
-        debug(self.map_action.current_state, x = 70)
-        # debug(self.battlers['Player1'].skills, y= 50)
-        # debug(self.battlers['Player1'].effects, y= 70)
-        debug([battler.OVD_progress for battler in self.battler_sprites], y= 90)
+        # 화면에 고정된 스프라이트(예: PHASE_CHANGE 애니메이션) 그리기:
+        # debug(self.battlers[0].effects, y=50)
+        # debug([s.priority for s in self.visible_sprites if not 'layer' in s.sprite_type ], y=70)
+        # debug([s.sprite_type for s in self.visible_sprites if not 'layer' in s.sprite_type], y=110)
+        # # debug()
+        # debug(self.cursor.pos, x=150)
+        # debug(self.map_action.current_state, x=70)
+        # debug([battler.OVD_progress for battler in self.battler_sprites], y=90)
+
 
 class YSortCameraGroup(pygame.sprite.Group):
     def __init__(self):
@@ -329,7 +332,7 @@ class YSortCameraGroup(pygame.sprite.Group):
         
     def disable_zoom(self):
         """Disable zoom and reset zoom scale to 1.0"""
-        self.zoom_enabled = True
+        self.zoom_enabled = False  # 줌을 끄도록 수정
         self.target_zoom = 1.0
         self.zoom_scale = 1.0
 
@@ -385,16 +388,16 @@ class YSortCameraGroup(pygame.sprite.Group):
             self.shake_offset = pygame.math.Vector2(0, 0)
 
     def custom_draw(self, player):
-        # 쉐이크 효과 업데이트
+        # 1. 쉐이크 효과 업데이트
         self.update_shake()
         
-        # 카메라 이동 처리
+        # 2. 카메라 이동 처리
         if self.is_moving:
             diff_x = self.target_offset.x - self.offset.x
             diff_y = self.target_offset.y - self.offset.y
             self.offset.x += diff_x * self.move_speed
             self.offset.y += diff_y * self.move_speed
-            
+
             if abs(diff_x) < 0.5 and abs(diff_y) < 0.5:
                 self.offset = self.target_offset.copy()
                 self.is_moving = False
@@ -412,43 +415,45 @@ class YSortCameraGroup(pygame.sprite.Group):
             elif self.offset.y > target_y + CAMERA_MARGIN_Y:
                 self.offset.y = target_y + CAMERA_MARGIN_Y
 
-        # 맵 경계 처리
+        # 3. 맵 경계 처리
         self.offset.x = max(0, min(self.offset.x, self.Mapmax.x - WIDTH))
         self.offset.y = max(0, min(self.offset.y, self.Mapmax.y - HEIGHT))
-
-        # 쉐이크 오프셋 적용
+        
+        # 4. 쉐이크 오프셋 적용
         final_offset = self.offset + self.shake_offset
 
-        # 일반 렌더링
+        # 5. render_surface에 모든 스프라이트 그리기
+        # render_surface를 먼저 클리어합니다.
         self.render_surface.fill((0, 0, 0, 0))
         for sprite in sorted(self.sprites(), key=lambda sprite: sprite.priority if hasattr(sprite, 'priority') else sprite.rect.centery):
-            offset_pos = sprite.rect.topleft - final_offset  # 쉐이크 효과가 적용된 오프셋 사용
+            # 'Screen_Sprite' 타입은 화면 고정 좌표로 처리합니다.
+            if getattr(sprite, "sprite_type", None) == 'Screen_Sprite':
+                offset_pos = sprite.rect.topleft
+            else:
+                offset_pos = sprite.rect.topleft - final_offset
             self.render_surface.blit(sprite.image, offset_pos)
-
-        # 줌 처리 (기존 코드와 동일)
+        
+        # 6. 줌 처리: zoom_enabled가 True이면 render_surface를 스케일해서 display_surface에 blit
         if self.zoom_enabled:
+            # zoom_scale이 target_zoom에 천천히 수렴하도록 업데이트
             if abs(self.zoom_scale - self.target_zoom) > 0.001:
                 self.zoom_scale += (self.target_zoom - self.zoom_scale) * self.zoom_speed
 
             zoom_width = int(WIDTH * self.zoom_scale)
             zoom_height = int(HEIGHT * self.zoom_scale)
             
+            # 화면 중앙을 기준으로 scaling
             center_x = WIDTH // 2
             center_y = HEIGHT // 2
-            
-            zoom_rect = pygame.Rect(
-                center_x - (zoom_width // 2),
-                center_y - (zoom_height // 2),
-                zoom_width,
-                zoom_height
-            )
-
             scaled_surface = pygame.transform.scale(self.render_surface, (zoom_width, zoom_height))
-
+            
+            # display_surface를 클리어한 후 스케일된 surface를 중앙에 blit
             self.display_surface.fill((0, 0, 0))
             self.display_surface.blit(scaled_surface, (center_x - zoom_width // 2, center_y - zoom_height // 2))
         else:
+            # 줌이 꺼져 있으면 render_surface를 그대로 display_surface에 blit
             self.display_surface.blit(self.render_surface, (0, 0))
+
     def focus_on_target(self, target, cursor_obj=None):
         """특정 대상의 위치로 카메라를 부드럽게 이동, 커서는 즉시 이동"""
         # 타겟의 중앙 위치 계산
@@ -468,6 +473,7 @@ class YSortCameraGroup(pygame.sprite.Group):
             cursor_obj.rect.center = target.collision_rect.center
             cursor_obj.Goto = pygame.math.Vector2(0, 0)  # 이동 중인 상태 초기화
             cursor_obj.pos = pygame.math.Vector2(cursor_obj.rect.topleft[0] // TILESIZE, cursor_obj.rect.topleft[1] // TILESIZE)
+
 
 class PanoramaBackground(pygame.sprite.Sprite):
     def __init__(self, level):

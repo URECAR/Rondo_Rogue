@@ -19,7 +19,8 @@ class MAP1:
             'level': 3,
             'team': 'Ally',
             'char_type': 'Player1',
-            'spawn_order': 1
+            'spawn_order': 1,
+            'spawn_pos' : [23, 18],
         },
         'Ally2': {
             'level': 4,
@@ -44,41 +45,55 @@ class MAP1:
         'Enemy1': {
             'level': 5,
             'team': 'Enemy',
-            'char_type': 'Spirit',
+            'char_type': 'Piglin',
             'spawn_order': 1,
             'spawn_pos': [19, 19]
         },
-        'Enemy2': {
-            'level': 6,
-            'team': 'Enemy',
-            'char_type': 'Army_Archer',
-            'spawn_order': 1,
-            'spawn_pos': [25, 18]
-        },
-        'Enemy3': {
-            'level': 6,
-            'team': 'Enemy',
-            'char_type': 'Piglin',
-            'spawn_order': 1,
-            'spawn_pos': [26, 18]
-        },
-        'Enemy4': {
-            'level': 6,
-            'team': 'Enemy',
-            'char_type': 'Bamboo',
-            'spawn_order': 1,
-            'spawn_pos': [27, 18]
-        },
+        # 'Enemy1-1': {
+        #     'level': 5,
+        #     'team': 'Enemy',
+        #     'char_type': 'Spirit',
+        #     'spawn_order': 1,
+        #     'spawn_pos': [21, 21]
+        # },
+        # 'Enemy2': {
+        #     'level': 6,
+        #     'team': 'Enemy',
+        #     'char_type': 'Army_Archer',
+        #     'spawn_order': 1,
+        #     'spawn_pos': [24, 16]
+        # },
+        # 'Enemy2-1': {
+        #     'level': 6,
+        #     'team': 'Enemy',
+        #     'char_type': 'Army_Archer',
+        #     'spawn_order': 1,
+        #     'spawn_pos': [27, 17]
+        # },
+        # 'Enemy3': {
+        #     'level': 6,
+        #     'team': 'Enemy',
+        #     'char_type': 'Piglin',
+        #     'spawn_order': 1,
+        #     'spawn_pos': [26, 18]
+        # },
+        # 'Enemy4': {
+        #     'level': 6,
+        #     'team': 'Enemy',
+        #     'char_type': 'Bamboo',
+        #     'spawn_order': 1,
+        #     'spawn_pos': [27, 18]
+        # },
         
         # 추가 스폰 예시 (나중에 spawn_order 2, 3, 4로 생성될 수 있는 유닛들)
-        'reinforce_ally1': {
+        'reinforce_Enemy1': {
             'level': 5,
-            'team': 'Ally',
-            'char_type': 'Player1',
+            'team': 'Enemy',
+            'char_type': 'Piglin',
             'spawn_order': 2,
-            'spawn_pos': [1, 4]
+            'spawn_pos': [10, 14]
         },
-        'reinforce_enemy1': {
+        'reinforce_Enemy2': {
             'level': 7,
             'team': 'Enemy',
             'char_type': 'Piglin',
@@ -122,28 +137,29 @@ class CharacterDatabase:
                 'offset': [0, -32]  # 중앙에서 위로 16픽셀 이동
             },
             'Class': 'Melee',
+            'Range' : 4,
             'equips' : [
                 # '절망','안아줘요 날다람쥐','러시안룰렛', '도윤이의 풍선자동차'
                         ],
             # 'Range' : 6,
             'inventory': ['HP_Potion', 'MP_Potion', 'Shield_Potion','Battle_Potion'],
             'skills': {
-                '불굴의 의지' : 1,
+                # '불굴의 의지' : 1,
                 # '무념의 기보' : 1,
-                '체력 단련' : 3,
-                '아이스1' : 1,
-                '아이스2' : 1,
-                '번개 마법1' : 1,
+                # '체력 단련' : 3,
+                # '아이스1' : 1,
+                # '아이스2' : 1,
+                # '번개 마법1' : 1,
                 # '오버드라이브1' : 1,
-                '근접 방어 태세' : 1,
-                '테스트스킬3' : 1,
-                '힐링' : 1,
+                # '근접 방어 태세' : 1,
+                # '테스트스킬3' : 1,
+                # '힐링' : 1,
                 # '테스트스킬5' : 1,
-                '상시 근접 방어' : 1,
-                '저돌맹진' : 1,
-                '무념의 기보' : 3,
+                # '상시 근접 방어' : 1,
+                # '저돌맹진' : 1,
+                # '무념의 기보' : 3,
                 # 'Z.O.C 무시' : 1,
-                '신중함' : 3,
+                # '신중함' : 3,
             },
             'OverDrive' : {                 # select_OV_Target 함수로 사용 진행. 
                 'skill' : '오버드라이브1',
@@ -217,11 +233,11 @@ class CharacterDatabase:
                 'die_animation': 'SPREAD_LINE',
                 'attack_delay': 400,
                 'attack_afterdelay': 100,
-                'size': 1.0,  # 2배 크기
+                'size': 2.0,  # 2배 크기
             },
             'equips' : ['절망'],
             'Class': 'Range',
-            'Range' : 6,
+            'Range' : 9,
             'inventory': ['HP_Potion', 'MP_Potion', 'Shield_Potion'],
             'skills': {
                 # '강력' : 1,
@@ -341,7 +357,7 @@ class CharacterDatabase:
             'name'  : '피글 린',
             'base_stats': {
                 'Max_HP': 120, 'Max_MP': 1, 'STR': 23, 'DEX': 4, 'INT': 4, 'RES': 16,
-                'CHA': 25, 'Max_EXP': 30, 'Mov': 4
+                'CHA': 25, 'Max_EXP': 30, 'Mov': 7
             },
             'growth_stats': {
                 # 기본 성장률
@@ -789,18 +805,7 @@ ANIMATION_PROPERTIES = {
         'fade_out_duration': 0.2,  # 페이드 아웃 시간
         'folder_path': '../graphics/UI',  # 이미지 경로
     },
-    'STAT_CHANGE': {
-        'size': 1,
-        'anchor': 'center',
-        'duration': 1.0,
-        'rise_speed': 30, 
-        'fade_in': 0.2,
-        'fade_out': 0.3,
-        'font_size': 18,
-        'font_color': (255, 255, 255),
-        'bg_color': (0, 0, 0, 128),
-        'bg_padding': (8, 4)
-    },
+
     'LEVEL_UP': {
         'size': 1,
         'anchor': 'center',

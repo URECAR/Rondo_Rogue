@@ -1,11 +1,11 @@
 # ai.py
-from database import CharacterDatabase, SKILL_PROPERTIES,CombatFormulas
+from database import CharacterDatabase, SKILL_PROPERTIES, CombatFormulas
 import pygame
 from tile import Tile
 from properties import *
 import random
 from common_method import istarget
-class AI():
+class AI:
     def __init__(self,map_action):
         self.map_action = map_action
         self.level = map_action.level        
@@ -16,12 +16,13 @@ class AI():
     def battler_init(self):
         self.selected_battler = self.map_action.selected_battler
         self.max_moves = self.selected_battler.stats["Mov"]
+        self.cur_moves = self.max_moves
         self.char_type = self.selected_battler.char_type
         self.char_data = CharacterDatabase.data.get(self.char_type, {})
-        self.Class = self.char_data
+        self.char_class = self.char_data
         self.battlersEnemies = [battler for battler in self.level.battler_sprites if battler.team != self.selected_battler.team]
         self.result_temp_move_roots = []
-        self.afterattack_move_type = '후퇴'
+        self.after_attack_move_type = '후퇴'
         
     def melee_ai(self):
         temp_move_roots = []
@@ -33,7 +34,7 @@ class AI():
 
         while cur_moves > 0:
             excluded_list = temp_move_roots[:] + [self.selected_battler.pos]
-            movable_tiles = self.map_action.check_movable_from_pos(start_pos, cur_moves, exclude_pos=excluded_list, show=False)
+            movable_tiles = self.map_action.check_movable_from_pos(start_pos, cur_moves, exclude_pos=excluded_list)
             searched = []
             movable_positions = {pos for pos, moves in movable_tiles}
             sorted_battlers = sorted([b for b in self.battlersEnemies if b not in excluded_targets],key=lambda x: x.stats["CHA"],reverse=True)
@@ -49,7 +50,7 @@ class AI():
                     for tile_pos, remaining_moves in movable_tiles:
                         if tile_pos == battler_pos:
                             # 공격 후 후퇴 가능한지 확인
-                            target_movable_tiles = self.map_action.check_movable_from_pos(searching_battler.pos, remaining_moves, show=False,exclude_pos=excluded_list)
+                            target_movable_tiles = self.map_action.check_movable_from_pos(searching_battler.pos, remaining_moves,exclude_pos=excluded_list)
                             # 후퇴할 공간이 없으면 이 대상은 제외
                             if not target_movable_tiles:
                                 excluded_targets.add(searching_battler)
@@ -71,7 +72,7 @@ class AI():
                 cur_moves = remaining_moves
             else:
                 if temp_move_roots and cur_moves and battler:
-                    target_battler_movable_tiles = self.map_action.check_movable_from_pos(battler.pos, battler.stats['Mov'], show=False,except_self= True)
+                    target_battler_movable_tiles = self.map_action.check_movable_from_pos(battler.pos, battler.stats['Mov'],except_self= True)
                     
                     if not target_battler_movable_tiles:
                         # 현재 타겟을 제외 목록에 추가하고 처음부터 다시 시작
@@ -110,7 +111,7 @@ class AI():
                         battler = None
                         continue
                     
-                    back_tiles = self.map_action.check_movable_from_pos(temp_move_roots[-1], cur_moves, exclude_pos=excluded_list, show=False,check_pos=pygame.math.Vector2(after_attack_tile))
+                    back_tiles = self.map_action.check_movable_from_pos(temp_move_roots[-1], cur_moves, exclude_pos=excluded_list, check_pos=pygame.math.Vector2(after_attack_tile))
                     
                     if back_tiles:
                         random_back_path = random.choice(back_tiles)
@@ -416,6 +417,195 @@ class AI():
             return '턴종료'
         return '턴종료'
 
+    def calc_movable_attackable_tiles(self,start = 'battler',exclude_root = False):
+        if start == 'battler':
+            standard = self.selected_battler.pos
+        elif start == 'root_end':
+            standard = pygame.math.Vector2(self.result_temp_move_roots[-1])
+        moves = self.cur_moves
+        if exclude_root:
+            exclude_list = self.result_temp_move_roots.copy()
+            exclude_list.append(self.selected_battler.pos)
+            result = self.map_action.check_movable_from_pos(standard, moves, exclude_pos=exclude_list,attackable_check=True)
+        else:
+            result = self.map_action.check_movable_from_pos(standard, moves, attackable_check=True)
+        self.attackable_tiles, self.movable_tiles = ([tiles for tiles, _, attackable in result if attackable],[tiles for tiles, _, attackable in result])
+
+    def is_targetable(self,battler):
+        return battler.pos in self.attackable_tiles and battler.team != self.selected_battler.team
+    def search_targetable(self):    # 검색된 대상들을 CHA가 높은 순으로 정렬해 반환
+        self.searched = []
+        for battler in self.level.battler_sprites:
+            if self.is_targetable(battler):
+                self.searched.append(battler)
+    def sort_CHA(list):
+        return list.sort(key=lambda x: x.stats["CHA"], reverse=True)
+    def create_hit_route(self):
+        target = self.searched[0]
+        routes = self.map_action.check_movable_from_pos(self.selected_battler.pos,self.cur_moves,check_pos=target.pos)
+        print(f"{routes}")
+        route = random.choice(routes)[1:]
+        for tile in route:
+            self.cur_moves -= int(self.level.level_data["moves"][int(tile[0])][int(tile[1])])
+        print(f"이동 경로: {route}, 남은 이동력: {self.cur_moves}")
+        self.result_temp_move_roots.extend(route)
+    def create_run_route(self):
+        target = self.searched[0]
+        root_end = pygame.math.Vector2(self.result_temp_move_roots[-1])
+        if target.Class == 'Melee':
+            result = self.map_action.check_movable_from_pos(target.pos, target.stats["Mov"], attackable_check=True)
+            targets_attackable_tiles = [tiles for tiles, _, attackable in result if attackable]
+            
+            # 기존 경로를 제외 리스트에 추가
+            exclude_list = self.result_temp_move_roots[:] + [self.selected_battler.pos]
+            
+            # 현재 이동 가능한 타일 계산 (제외 리스트 적용)
+            current_movable = self.map_action.check_movable_from_pos(
+                root_end, 
+                self.cur_moves,
+                exclude_pos=exclude_list
+            )
+            movable_positions = [pos for pos, _ in current_movable]
+            
+            # 안전한 타일 찾기
+            safe_tiles = [x for x in movable_positions if x not in targets_attackable_tiles]
+            
+            if safe_tiles:
+                # 안전한 타일 중 가장 적절한 위치 선택
+                after_attack_tile = max(safe_tiles, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                # 선택된 위치까지의 경로 찾기
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(after_attack_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+            else:
+                # 안전한 타일이 없는 경우, 가장 멀리 도망가기
+                farthest_tile = max(movable_positions, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(farthest_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+        elif target.Class == 'Range':
+            # range 사거리 바깥 safe_tiles 계산
+            attack_range = CharacterDatabase.data.get(target.char_type, {}).get("Range", 0)
+            # target.char_data["Range"]
+            safe_tiles = [
+                pos for pos in movable_positions
+                if abs(pos[0] - target.pos.x) + abs(pos[1] - target.pos.y) > attack_range
+            ]
+            # ...existing code: safe_tiles 없으면 최대로 멀리 도망...
+            if safe_tiles:
+                # 안전한 타일 중 가장 적절한 위치 선택
+                after_attack_tile = max(safe_tiles, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                # 선택된 위치까지의 경로 찾기
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(after_attack_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+            else:
+                # 안전한 타일이 없는 경우, 가장 멀리 도망가기
+                farthest_tile = max(movable_positions, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(farthest_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+        elif target.Class == 'Magic':
+            # range와 동일하게 사거리 밖 safe_tiles 계산
+            attack_range = target.stats["Range"]
+            safe_tiles = [
+                pos for pos in movable_positions
+                if abs(pos[0] - target.pos.x) + abs(pos[1] - target.pos.y) > attack_range
+            ]
+            # ...existing code: safe_tiles 없으면 최대로 멀리 도망...
+            if safe_tiles:
+                # 안전한 타일 중 가장 적절한 위치 선택
+                after_attack_tile = max(safe_tiles, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                # 선택된 위치까지의 경로 찾기
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(after_attack_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+            else:
+                # 안전한 타일이 없는 경우, 가장 멀리 도망가기
+                farthest_tile = max(movable_positions, 
+                    key=lambda item: (self.selected_battler.pos - target.pos).dot(pygame.math.Vector2(item) - target.pos))
+                
+                routes = self.map_action.check_movable_from_pos(
+                    root_end,
+                    self.cur_moves,
+                    check_pos=pygame.math.Vector2(farthest_tile),
+                    exclude_pos=exclude_list
+                )
+                
+                if routes:
+                    route = random.choice(routes)
+                    vector_list = [pygame.math.Vector2(t) for t in route[1:]]  # 시작점 제외
+                    self.result_temp_move_roots.extend(vector_list)
+
+    def test(self):
+        self.calc_movable_attackable_tiles(start = 'battler')    # 이동 가능한 타일과 공격 가능한 타일을 계산
+        self.search_targetable()    # 공격 가능한 대상을 검색
+        if self.searched:
+            self.sort_CHA(self.searched)
+            self.create_hit_route()
+            if True:    # hit_and_run 타입이면
+                self.calc_movable_attackable_tiles(start = 'root_end', exclude_root = True)
+                self.create_run_route() # 후퇴 경로 생성
+                return '이동'
+            elif False: # multi_target 타입이면
+                pass
+            # 
+        
+        # self.map_action.highlight_tiles_set(attackable_tiles, mode='Set', color='red')
+        # self.map_action.highlight_tiles_set(movable_tiles, mode='Set', color='green')
+        
+        # return '턴종료'
+    
     def execute(self):
         self.battler_init()
         # print(self.char_data)
@@ -423,10 +613,12 @@ class AI():
             result = '턴종료'
         elif self.char_data['Class'] == 'Melee':
             result = self.melee_ai()
-        elif self.char_data['Class'] == 'Range':
+        elif self.char_class['Class'] == 'Range':
             result = self.range_ai()
-        elif self.char_data['Class'] == 'Magic':
+        elif self.char_class['Class'] == 'Magic':
             result = self.magic_ai()
+        elif self.char_class['Class'] == 'Test':
+            result = self.test()
         # print(result)
         if result == '이동':
             self.execute_move_roots()
