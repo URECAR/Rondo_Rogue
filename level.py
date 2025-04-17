@@ -455,24 +455,49 @@ class YSortCameraGroup(pygame.sprite.Group):
             self.display_surface.blit(self.render_surface, (0, 0))
 
     def focus_on_target(self, target, cursor_obj=None):
-        """특정 대상의 위치로 카메라를 부드럽게 이동, 커서는 즉시 이동"""
-        # 타겟의 중앙 위치 계산
-        target_x = target.collision_rect.centerx - self.half_width
-        target_y = target.collision_rect.centery - self.half_height
-        
-        # 맵 경계 체크
-        target_x = max(0, min(target_x, self.Mapmax.x - WIDTH))
-        target_y = max(0, min(target_y, self.Mapmax.y - HEIGHT))
+        """특정 대상의 위치로 카메라(부드럽게)와 커서(즉시)를 이동"""
+        if not target: return
 
-        # 목표 위치 설정
-        self.target_offset = pygame.math.Vector2(target_x, target_y)
-        self.is_moving = True
+        # --- 카메라 포커스 (부드러운 이동 유지) ---
+        target_cam_x = target.collision_rect.centerx - self.half_width
+        target_cam_y = target.collision_rect.centery - self.half_height
 
-        # 커서 즉시 이동
+        current_view_width = WIDTH / self.zoom_scale if self.zoom_enabled else WIDTH
+        current_view_height = HEIGHT / self.zoom_scale if self.zoom_enabled else HEIGHT
+        target_cam_x = max(0, min(target_cam_x, self.Mapmax.x - current_view_width))
+        target_cam_y = max(0, min(target_cam_y, self.Mapmax.y - current_view_height))
+
+        self.target_offset = pygame.math.Vector2(target_cam_x, target_cam_y)
+        self.is_moving = True # 부드러운 카메라 이동 트리거
+
+        # --- 커서 포커스 (즉시 이동) ---
         if cursor_obj:
-            cursor_obj.rect.center = target.collision_rect.center
-            cursor_obj.Goto = pygame.math.Vector2(0, 0)  # 이동 중인 상태 초기화
-            cursor_obj.pos = pygame.math.Vector2(cursor_obj.rect.topleft[0] // TILESIZE, cursor_obj.rect.topleft[1] // TILESIZE)
+            # 목표 타일의 좌상단 픽셀 좌표 계산
+            target_tile_x = target.pos.x
+            target_tile_y = target.pos.y
+            target_cursor_pixel_x = target_tile_x * TILESIZE
+            target_cursor_pixel_y = target_tile_y * TILESIZE
+
+            # 진행 중인 모든 커서 이동 취소
+            cursor_obj.Goto = pygame.math.Vector2(0, 0)
+            cursor_obj.ismoving = False
+            cursor_obj.is_click_moving = False # 시간 기반 이동도 취소
+
+            # 커서 위치 즉시 설정
+            cursor_obj.rect.topleft = (target_cursor_pixel_x, target_cursor_pixel_y)
+            cursor_obj.collision_rect.topleft = cursor_obj.rect.topleft
+
+            # 논리적 위치 및 이전 위치 즉시 업데이트
+            new_pos = pygame.math.Vector2(target_tile_x, target_tile_y)
+            # 위치가 실제로 변경되었는지 확인 (불필요한 사운드 방지)
+            # if new_pos != cursor_obj.pos and not cursor_obj.move_lock:
+            #     cursor_obj.sound_manager.play_sound(**SOUND_PROPERTIES['CURSOR_MOVE'])
+            # focus_on_target 시에는 소리를 내지 않는 것이 자연스러울 수 있습니다. 필요하면 위 주석 해제.
+            cursor_obj.pos = new_pos
+            cursor_obj.previous_pos = cursor_obj.pos.copy()
+
+            # start_timed_move 호출 제거
+            # cursor_obj.start_timed_move(target_pixel_pos) # REMOVED
 
 
 class PanoramaBackground(pygame.sprite.Sprite):
